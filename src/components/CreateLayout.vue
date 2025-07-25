@@ -1,7 +1,7 @@
 <script setup>
-import Header from '@/components/Header.vue'
+import Header from '@/components/Header.vue';
 import FooterCopyright from '@/components/FooterCopyright.vue'
-
+import CreateAside from './CreateAside.vue';
 </script>
 
 <template>
@@ -9,10 +9,13 @@ import FooterCopyright from '@/components/FooterCopyright.vue'
         <div class="header">
             <Header></Header>
         </div>
-        <div class="main">
-            <el-main>
-                <div>账号管理</div>
-            </el-main>
+        <div class="content">
+            <div class="aside">
+                <CreateAside></CreateAside>
+            </div>
+            <div class="main">
+                <RouterView />
+            </div>
         </div>
         <div class="footer">
             <FooterCopyright></FooterCopyright>
@@ -33,11 +36,23 @@ import FooterCopyright from '@/components/FooterCopyright.vue'
         height: fit-content;
     }
 
-    .main {
+    .content {
         flex: 1;
-        color: #000000;
-        background-color: #f9fafb;
+        display: flex;
+
+        .aside {
+            height: 100%;
+            width: fit-content;
+        }
+
+        .main {
+            background-color: #ffffff;
+            flex: 1;
+            color: #000000;
+        }
     }
+
+
 
     .footer {
         height: fit-content;

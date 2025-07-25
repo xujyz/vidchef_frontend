@@ -1,9 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '../views/HomeView.vue'
 
 const routes = [
   {
     path: '/',
+    redirect: '/home'
+  },
+  {
+    path: '/home',
     name: 'Home',
     component: () => import('../views/Home/Home.vue')
   },
@@ -16,7 +19,7 @@ const routes = [
     path: '/create',
     redirect: '/create/generate',
     name: 'Create',
-    component: () => import('../views/Create/Generate.vue'),
+    component: () => import('../components/CreateLayout.vue'),
     meta: { requiresAuth: true },
     children: [
       {
@@ -43,7 +46,7 @@ const routes = [
     path: '/login',
     name: 'Login',
     component: () => import('../views/Login.vue'),
-    meta: { requiresAuth: false }
+    // meta: { requiresAuth: false }
   }
 ]
 
@@ -52,24 +55,24 @@ const router = createRouter({
   routes
 })
 
-//路由守卫
-router.beforeEach((to, from, next) => {
-  console.log("q", to.meta, userRole)
-  // 需要登录但未登录
-  if (to.meta.requiresAuth && !isAuthenticated) {
-    console.log("需要登录但未登录")
-    return next('/login')
-  }
+// //路由守卫
+// router.beforeEach((to, from, next) => {
+//   console.log("q", to.meta, userRole)
+//   // 需要登录但未登录
+//   if (to.meta.requiresAuth && !isAuthenticated) {
+//     console.log("需要登录但未登录")
+//     return next('/login')
+//   }
 
-  // 检查权限
-  if (to.meta.roles && !to.meta.roles.includes(userRole)) {
-       console.log("检查权限")
-    return next('/') // 无权限则重定向到首页
+//   // 检查权限
+//   if (to.meta.roles && !to.meta.roles.includes(userRole)) {
+//        console.log("检查权限")
+//     return next('/') // 无权限则重定向到首页
     
-  }
-  console.log("ok")
+//   }
+//   console.log("ok")
 
-  next()
-})
+//   next()
+// })
 
 export default router
