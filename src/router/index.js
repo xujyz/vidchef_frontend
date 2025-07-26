@@ -3,17 +3,17 @@ import { createRouter, createWebHistory } from 'vue-router'
 const routes = [
   {
     path: '/',
-    redirect: '/home'
+    redirect: '/home',
   },
   {
     path: '/home',
     name: 'Home',
-    component: () => import('../views/Home/Home.vue')
+    component: () => import('../views/Home/Home.vue'),
   },
   {
     path: '/price',
     name: 'Price',
-    component: () => import('../views/Price/Price.vue')
+    component: () => import('../views/Price/Price.vue'),
   },
   {
     path: '/create',
@@ -31,7 +31,7 @@ const routes = [
       {
         path: 'space',
         name: 'Space',
-        component: () => import('../views/Create/Space.vue'),
+        component: () => import('../views/Create/Test.vue'),
         meta: { roles: ['user'], title: '我的空间' },
       },
       {
@@ -39,20 +39,20 @@ const routes = [
         name: 'Subscription',
         component: () => import('../views/Create/Subscription.vue'),
         meta: { roles: ['user'], title: '我的订阅' },
-      }
-    ]
+      },
+    ],
   },
   {
     path: '/login',
     name: 'Login',
     component: () => import('../views/Login.vue'),
     // meta: { requiresAuth: false }
-  }
+  },
 ]
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes
+  routes,
 })
 
 // //路由守卫
@@ -68,7 +68,7 @@ const router = createRouter({
 //   if (to.meta.roles && !to.meta.roles.includes(userRole)) {
 //        console.log("检查权限")
 //     return next('/') // 无权限则重定向到首页
-    
+
 //   }
 //   console.log("ok")
 
