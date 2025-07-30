@@ -3,7 +3,7 @@
     <el-footer class="layout-footer">
         <div class="footer-container">
             <div class="grid">
-                <div>
+                <div class="grid-content">
                     <h4 class="text-header">关于我们</h4>
                     <ul class="text-content">
                         <li><a href="#" class="text">公司介绍</a></li>
@@ -11,7 +11,7 @@
                         <li><a href="#" class="text">加入我们</a></li>
                     </ul>
                 </div>
-                <div>
+                <div class="grid-content">
                     <h4 class="text-header">产品</h4>
                     <ul class="text-content">
                         <li><a href="#" class="text">功能特点</a></li>
@@ -19,7 +19,7 @@
                         <li><a href="#" class="text">定价方案</a></li>
                     </ul>
                 </div>
-                <div>
+                <div class="grid-content">
                     <h4 class="text-header">支持</h4>
                     <ul class="text-content">
                         <li><a href="#" class="text">帮助中心</a></li>
@@ -27,7 +27,7 @@
                         <li><a href="#" class="text">联系我们</a></li>
                     </ul>
                 </div>
-                <div>
+                <div class="grid-content">
                     <h4 class="text-header">关注我们</h4>
                     <div class="icon-content">
                         <a href="#" class="text">
@@ -66,7 +66,6 @@ import { Position, Message, ChatDotRound } from '@element-plus/icons-vue';
     height: fit-content;
 
     .footer-container {
-        width: 100%;
         max-width: 80rem; // Default container max-width in Tailwind (1280px)
         margin-left: auto;
         margin-right: auto;
@@ -77,6 +76,7 @@ import { Position, Message, ChatDotRound } from '@element-plus/icons-vue';
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
             margin-bottom: 2rem;
+            justify-content: space-around;
 
             .text-header {
                 font-size: 1.125rem;

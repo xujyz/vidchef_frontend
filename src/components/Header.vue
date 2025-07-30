@@ -24,13 +24,13 @@ import LogoImage from '@/assets/VidChef-logo.png'
 
 <style scoped lang="scss">
 .app {
+    width: 100%;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
 }
 
 .layout-header {
-    width: 100vw;
     height: fit-content;
     background-color: #ffffff;
     padding: 10px 20px;

@@ -24,10 +24,10 @@ import CreateAside from './CreateAside.vue';
 
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .el-container {
     width: 100%;
-    min-height: 100%;
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -41,7 +41,7 @@ import CreateAside from './CreateAside.vue';
         display: flex;
 
         .aside {
-            height: 100%;
+            min-height: 100%;
             width: fit-content;
         }
 

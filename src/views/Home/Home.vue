@@ -55,99 +55,113 @@ const cases = ref([
 </script>
 
 <template>
-    <el-container>
+    <div class="wrapper">
         <div class="header">
             <Header></Header>
         </div>
-        <div class="main">
-            <el-main>
-                <!-- Hero区域 -->
-                <div class="hero-section">
-                    <div class="hero-overlay">
-                        <div class="hero-content">
-                            <div class="hero-text-container">
-                                <h1 class="hero-title">从商品到爆款视频</h1>
-                                <h1 class="hero-title2">电商短视频，AI一键生成</h1>
-                                <p class="hero-description">短视频掘金时代，每多发一条视频就是多无数成单的机会。</p>
-                                <p class="hero-description">手搓的速度永远比不过大数据，手搓的人力成本却比AI高得多。</p>
-                                <p class="hero-description">一站式AI电商视频生成工具，轻松帮您生成高质量产品视频。</p>
-                                <div class="hero-buttons">
-                                    <el-button type="primary" class="start-button">立即开始</el-button>
-                                    <el-button plain type="primary" class="demo-button">查看演示</el-button>
+        <el-container class="container">
+
+            <div class="main">
+                <el-main>
+                    <!-- Hero区域 -->
+                    <div class="hero-section">
+                        <div class="hero-overlay">
+                            <div class="hero-content">
+                                <div class="hero-text-container">
+                                    <h1 class="hero-title">从商品到爆款视频</h1>
+                                    <h1 class="hero-title2">电商短视频，AI一键生成</h1>
+                                    <p class="hero-description">短视频掘金时代，每多发一条视频就是多无数成单的机会。</p>
+                                    <p class="hero-description">手搓的速度永远比不过大数据，手搓的人力成本却比AI高得多。</p>
+                                    <p class="hero-description">一站式AI电商视频生成工具，轻松帮您生成高质量产品视频。</p>
+                                    <div class="hero-buttons">
+                                        <el-button type="primary" class="start-button">立即开始</el-button>
+                                        <el-button plain type="primary" class="demo-button">查看演示</el-button>
+                                    </div>
+                                </div>
+                                <div class="hero-image">
+                                    <img :src="heroImage" alt="home-banner"></img>
                                 </div>
                             </div>
-                            <div class="hero-image">
-                                <img :src="heroImage" alt="home-banner"></img>
+                        </div>
+                    </div>
+
+                    <!-- 功能特点 -->
+                    <div class="features-section">
+                        <div class="section-container">
+                            <h2 class="section-title">三步轻松生成专业视频</h2>
+                            <div class="features-grid">
+                                <div v-for="(feature, index) in features" :key="index" class="feature-card">
+                                    <img :src="feature.image" :alt="feature.title" class="feature-image" />
+                                    <h3 class="feature-title">{{ feature.title }}</h3>
+                                    <p class="feature-description">{{ feature.description }}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- 功能特点 -->
-                <div class="features-section">
-                    <div class="section-container">
-                        <h2 class="section-title">三步轻松生成专业视频</h2>
-                        <div class="features-grid">
-                            <div v-for="(feature, index) in features" :key="index" class="feature-card">
-                                <img :src="feature.image" :alt="feature.title" class="feature-image" />
-                                <h3 class="feature-title">{{ feature.title }}</h3>
-                                <p class="feature-description">{{ feature.description }}</p>
+                    <!-- 数据统计 -->
+                    <div class="stats-section">
+                        <div class="section-container">
+                            <div class="stats-grid">
+                                <div v-for="(stat, index) in stats" :key="index" class="stat-item">
+                                    <div class="stat-value">{{ stat.value }}</div>
+                                    <div class="stat-label">{{ stat.label }}</div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- 数据统计 -->
-                <div class="stats-section">
-                    <div class="section-container">
-                        <div class="stats-grid">
-                            <div v-for="(stat, index) in stats" :key="index" class="stat-item">
-                                <div class="stat-value">{{ stat.value }}</div>
-                                <div class="stat-label">{{ stat.label }}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 客户案例 -->
-                <div class="cases-section">
-                    <div class="section-container">
-                        <h2 class="section-title">成功案例</h2>
-                        <div class="cases-grid">
-                            <div v-for="(case_, index) in cases" :key="index" class="case-card">
-                                <img :src="case_.image" :alt="case_.title" class="case-image" />
-                                <div class="case-content">
-                                    <h3 class="case-title">{{ case_.title }}</h3>
-                                    <p class="case-description">{{ case_.description }}</p>
-                                    <div class="case-footer">
-                                        <span class="case-link">查看详情</span>
-                                        <span class="case-date">{{ case_.date }}</span>
+                    <!-- 客户案例 -->
+                    <div class="cases-section">
+                        <div class="section-container">
+                            <h2 class="section-title">成功案例</h2>
+                            <div class="cases-grid">
+                                <div v-for="(case_, index) in cases" :key="index" class="case-card">
+                                    <img :src="case_.image" :alt="case_.title" class="case-image" />
+                                    <div class="case-content">
+                                        <h3 class="case-title">{{ case_.title }}</h3>
+                                        <p class="case-description">{{ case_.description }}</p>
+                                        <div class="case-footer">
+                                            <span class="case-link">查看详情</span>
+                                            <span class="case-date">{{ case_.date }}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </el-main>
-        </div>
-        <div class="footer">
-            <Footer></Footer>
-        </div>
-    </el-container>
+                </el-main>
+            </div>
+            <div class="footer">
+                <Footer></Footer>
+            </div>
+        </el-container>
+    </div>
+
 
 </template>
 
 <style scoped>
-.el-container {
+.wrapper {
     width: 100%;
-    min-height: 100%;
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    align-items: center;
+}
 
-    .header {
-        height: fit-content;
-    }
+.header {
+    height: fit-content;
+    width: 100%;
+}
+
+.el-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: 1440px;
 
     .main {
         flex: 1;
@@ -218,8 +232,7 @@ const cases = ref([
 
         .hero-image {
             margin-left: 4rem;
-            height: 600px;
-            width: 800px;
+            text-align: center;
             flex: 1;
         }
 
