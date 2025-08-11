@@ -1,8 +1,11 @@
 <script setup>
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 import Header from '@/components/Header.vue'
 import Footer from '@/components/Footer.vue'
 import heroImage from '@/assets/home-banner.png'
+
+const router = useRouter();
 
 // const heroImage = 'https://ai-public.mastergo.com/ai/img_res/8ff7bfbfa05a286cc5e0149645ddb1bc.jpg';
 
@@ -52,6 +55,10 @@ const cases = ref([
     }
 ]);
 
+const goGenerate = () => {
+    router.push("/create/generate");
+}
+
 </script>
 
 <template>
@@ -74,7 +81,8 @@ const cases = ref([
                                     <p class="hero-description">手搓的速度永远比不过大数据，手搓的人力成本却比AI高得多。</p>
                                     <p class="hero-description">一站式AI电商视频生成工具，轻松帮您生成高质量产品视频。</p>
                                     <div class="hero-buttons">
-                                        <el-button type="primary" class="start-button">立即开始</el-button>
+                                        <el-button type="primary" class="start-button"
+                                            @click="goGenerate">立即开始</el-button>
                                         <el-button plain type="primary" class="demo-button">查看演示</el-button>
                                     </div>
                                 </div>

@@ -1,27 +1,20 @@
 <script setup>
 // import { storeToRefs } from 'pinia';
 import {
-  User, DataAnalysis, Check, Star, ShoppingCart, Upload,
-  Search,
-  Operation,
-  ArrowLeft,
-  ArrowRight,
-  InfoFilled,
-  ChatDotRound,
-  Picture,
-  Platform
+  User, DataAnalysis, Check, Star, ShoppingCart, Upload, Search, Operation, ArrowLeft, ArrowRight,
+  InfoFilled, ChatDotRound, Picture, Platform, Plus, Rank, Edit, Delete, VideoPlay, StarFilled, Back, Right
 } from '@element-plus/icons-vue'
-import { onMounted, ref, reactive } from 'vue'
+import { onMounted, ref, reactive, computed } from 'vue'
 import { EVENT_CODE, ElMessage, ElMessageBox } from 'element-plus'
-// import { useWorkStore } from '@/stores/workStore';
 
-// const workStore = useWorkStore()
-// const { workState, workStep } = storeToRefs(workStore);
 const workState = ref('')
 const workStep = ref('')
 const loading = ref(false)
-const checkboxGroup1 = ref(['Value1'])
 const active = ref(0)
+
+const generateTags = ref([])  // 存储后端返回的 checkbox tags 选项
+const selectedTags = ref([])   // 存储选中的tags 值
+const genTagLoading = ref(false)     // 控制按钮 loading 状态
 
 // Selected options
 const selectedPlatform = ref('tiktok');
@@ -48,8 +41,8 @@ onMounted(() => {
 
 const generateSellingPoints = () => {
   // In a real app, this would call an API to generate points based on input
-  if (!productForm.value.sellingPointInput) {
-    ElMessage.warning('请先输入商品特点');
+  if (!form.productName) {
+    ElMessage.warning('请先输入商品名称');
     return;
   }
 
@@ -57,29 +50,55 @@ const generateSellingPoints = () => {
   // Simulate API call delay
   setTimeout(() => {
     // Add a new suggested point based on input
-    const newPoint = `基于${productForm.value.sellingPointInput}的智能优化功能`;
-    suggestedPoints.value.unshift(newPoint);
+    const newTags = [
+      '超长续航，单次充电可持续使用48小时',
+      'IP68级防水防尘，水下可用30分钟',
+      '创新双重降噪技术，通话更清晰'
+    ];
+    generateTags.value = newTags
+    console.log(generateTags.value)
     ElMessage.success('已生成新的卖点建议');
   }, 1000);
 };
 
-const selectPoint = (point) => {
-  if (!productForm.value.selectedPoints.includes(point)) {
-    productForm.value.selectedPoints.push(point);
-    ElMessage.success('已添加卖点');
-  }
-};
-
 const onSubmit = () => {
+  form.tags = [...form.tags, ...selectedTags.value]
   console.log(form.tags)
   ElMessage.success('正在分析商品信息...');
   isPersonaSubmitted.value = true
   workState.value = 'analyze'
   // In a real app, this would trigger the AI analysis
   setTimeout(() => {
+    const audienceGroups = [
+      {
+        id: 1,
+        title: '25-35 岁户外运动爱好者',
+        matchRate: 95,
+        age: '年龄：25-35 岁，以都市白领为主',
+        interests: '兴趣：户外运动、健身、摄影、旅行',
+        motivation: '消费动机：追求高品质生活，注重产品性能与设计'
+      },
+      {
+        id: 2,
+        title: '35-45 岁家庭主导购者',
+        matchRate: 85,
+        age: '年龄：35-45 岁，已婚有子女',
+        interests: '兴趣：亲子活动、家庭旅行、烹饪',
+        motivation: '消费动机：关注产品实用性与性价比，重视家人使用体验'
+      },
+      {
+        id: 3,
+        title: '18-24 岁年轻时尚群体',
+        matchRate: 75,
+        age: '年龄：18-24 岁，学生及职场新人',
+        interests: '兴趣：社交媒体、时尚潮流、音乐、游戏',
+        motivation: '消费动机：追求个性化与时尚感，易受网红推荐影响'
+      }
+    ]
     ElMessage.success('分析完成，已推荐最匹配的目标人群');
     // Highlight the first audience group
-    selectAudience(audienceGroups.value[0]);
+
+    selectAudience(audienceGroups[0]);
     workState.value = 'finish'
     loading.value = false
   }, 1500);
@@ -87,6 +106,7 @@ const onSubmit = () => {
 
 const selectAudience = (audience) => {
   selectedAudience.value = audience;
+  console.log('selectedAudience', selectAudience.value)
 };
 
 const goToNextStep = () => {
@@ -120,42 +140,10 @@ const goFinish = () => {
 
 };
 
-// Suggested selling points
-const suggestedPoints = ref([
-  '超长续航，单次充电可持续使用48小时',
-  'IP68级防水防尘，水下可用30分钟',
-  '创新双重降噪技术，通话更清晰'
-]);
-
 // Audience groups data
-const audienceGroups = ref([
-  {
-    id: 1,
-    title: '25-35 岁户外运动爱好者',
-    matchRate: 95,
-    age: '年龄：25-35 岁，以都市白领为主',
-    interests: '兴趣：户外运动、健身、摄影、旅行',
-    motivation: '消费动机：追求高品质生活，注重产品性能与设计'
-  },
-  {
-    id: 2,
-    title: '35-45 岁家庭主导购者',
-    matchRate: 85,
-    age: '年龄：35-45 岁，已婚有子女',
-    interests: '兴趣：亲子活动、家庭旅行、烹饪',
-    motivation: '消费动机：关注产品实用性与性价比，重视家人使用体验'
-  },
-  {
-    id: 3,
-    title: '18-24 岁年轻时尚群体',
-    matchRate: 75,
-    age: '年龄：18-24 岁，学生及职场新人',
-    interests: '兴趣：社交媒体、时尚潮流、音乐、游戏',
-    motivation: '消费动机：追求个性化与时尚感，易受网红推荐影响'
-  }
-]);
+const audienceGroups = ref();
 
-const selectedAudience = ref(audienceGroups.value[0]);
+const selectedAudience = ref();
 
 
 // Select platform
@@ -254,6 +242,9 @@ const goToPreviousStep = () => {
   });
 };
 
+// Generate video
+
+// Scene data
 const scenes = ref([
   {
     thumbnail: 'https://ai-public.mastergo.com/ai/img_res/0f9722a333b0f748c9c0381417c1253a.jpg',
@@ -349,18 +340,10 @@ const removeScene = (index) => {
                   @click="generateSellingPoints" /></template>
             </el-input-tag>
             <div class="selling-points-container">
-              <div class="suggested-points">
-                <div v-for="(point, index) in suggestedPoints" :key="index" class="point-item"
-                  @click="selectPoint(point)">
-                  <el-icon color="#2563eb">
-                    <Check />
-                  </el-icon>
-                  <span>{{ point }}</span>
-                </div>
-              </div>
-              <el-checkbox-group v-model="checkboxGroup1" size="small">
-                <el-checkbox label="Option1" value="Value1" />
-                <el-checkbox label="Option2" value="Value2" />
+              <el-checkbox-group v-if="generateTags.length" v-model="selectedTags" style="display: grid;">
+                <el-checkbox v-for="(option, index) in generateTags" :key="index" :label="option">
+                  {{ option }}
+                </el-checkbox>
               </el-checkbox-group>
             </div>
           </el-form-item>
@@ -600,12 +583,12 @@ const removeScene = (index) => {
       <div class="storyboard" v-show="workStep == 'storyboard'">
         <div class="storyboard-form">
           <div class="scene-header">
-            <h2 class="section-title">场景列表</h2>
+            <h2 class="section-title">分镜列表</h2>
             <el-button class="add-scene-button">
               <el-icon>
                 <Plus />
               </el-icon>
-              添加场景
+              添加分镜
             </el-button>
           </div>
 
@@ -652,7 +635,7 @@ const removeScene = (index) => {
         <div class="storyboard-res">
           <div class="preview-header">
             <div class="preview-tabs">
-              <el-button :type="activeTab === 'scene' ? 'primary' : ''" @click="activeTab = 'scene'">场景</el-button>
+              <el-button :type="activeTab === 'scene' ? 'primary' : ''" @click="activeTab = 'scene'">分镜</el-button>
               <el-button :type="activeTab === 'settings' ? 'primary' : ''"
                 @click="activeTab = 'settings'">设置</el-button>
             </div>
@@ -717,6 +700,8 @@ const removeScene = (index) => {
                 <div class="handle-dot"></div>
               </div>
             </div>
+          </div>
+          <div class="recommendations-container">
             <el-button type="primary" class="next-button" @click="goFinish">
               完成
             </el-button>
@@ -822,7 +807,7 @@ const removeScene = (index) => {
       transition: all 0.5s ease-in-out;
 
       &.shrink-persona-form {
-        width: 47%;
+        width: 43%;
         margin: 0;
         margin-right: 2rem;
       }
@@ -1198,14 +1183,21 @@ const removeScene = (index) => {
     }
   }
 
+
   .storyboard {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 2rem;
+    transition: all 0.5s ease;
+    width: 100%;
+
     .storyboard-form {
-      width: 50%;
-      border-right: 1px solid #e5e7eb;
-      padding: 1rem;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
+      width: 47%;
+      margin: 2rem;
+      padding: 2rem;
+      border-radius: 8px;
+      transition: all 0.5s ease-in-out;
 
       .scene-header {
         display: flex;
@@ -1359,8 +1351,7 @@ const removeScene = (index) => {
     }
 
     .storyboard-res {
-      width: 50%;
-      padding: 1.5rem;
+      flex: 1;
 
       .preview-header {
         display: flex;
