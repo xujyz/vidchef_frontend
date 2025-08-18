@@ -1,13 +1,14 @@
 <script setup>
 import { ref, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
+import { genTargetConsr } from '@/api/generate'
 
 // 表单数据
 const form = ref({
-  prod_name: '',
-  prod_img: '',
-  prod_tags: [],
-  region: ''
+  prod_name: 'a',
+  prod_img: ['a'],
+  prod_tags: ['a'],
+  region: 'e'
 })
 
 // 模拟标签选项
@@ -37,15 +38,14 @@ async function handleSubmit() {
   resultCards.value = []
 
   // 模拟调用后端流式接口
-  await simulateStreamApi()
-}
+  console.log(form.value)
 
-/**
- * 模拟流式输出 API
- * 实际使用时替换为 fetch + ReadableStream
- */
-async function simulateStreamApi() {
-  const fakeChunks = ['这是第一段流式输出...', '然后是第二段输出...', '最后的内容到这里结束。']
+  const fakeChunks = await genTargetConsr(form)
+
+  debugger
+
+  console.log(fakeChunks)
+  debugger
 
   for (let chunk of fakeChunks) {
     await new Promise(r => setTimeout(r, 800))
@@ -60,6 +60,7 @@ async function simulateStreamApi() {
   // 模拟最终数组结果
   resultCards.value = ['卡片1内容', '卡片2内容', '卡片3内容']
 }
+
 </script>
 
 <template>

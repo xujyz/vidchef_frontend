@@ -1,65 +1,55 @@
 import http from '@/utils/http.js'
 
-// 终端账号
-export const getTerminalList = (params) => {
+// 生成商品tags
+export const genProdTags = (data) => {
   return http.request({
-    url: '/api/terminal/list',
-    method: 'get',
-    params: { ...params },
-  })
-}
-
-//单位账号
-export const getUserList = (params) => {
-  return http.request({
-    url: '/api/user/list',
-    method: 'get',
-    params: { ...params },
-  })
-}
-
-//操作日志
-export const getOperateLogList = (params) => {
-  return http.request({
-    url: '/api/operationLog/getList',
-    method: 'get',
-    params: { ...params },
-  })
-}
-
-//实时作业人员
-
-export const getCurrentUser = () => {
-  return http.request({
-    url: '/api/monitor/currentUser',
-    method: 'get',
-  })
-}
-
-//订单
-export const getOrderList = (data) => {
-  return http.request({
-    url: '/api/productOrder/list',
+    url: '/api/gen/llm/gen_tag',
     method: 'post',
     data,
   })
 }
 
-//统计分析
-export const getStatisticsList = () => {
+//分析目标人群
+export const genTargetConsr = (data) => {
   return http.request({
-    url: '/api/statistics/overview',
-    method: 'get',
-    // data:{...data,token}
+    url: '/api/gen/llm/rec_target_consr',
+    method: 'post',
+    data,
   })
 }
 
-//终端作业记录
-export const getOnlineRecords = (data) => {
+//生成分镜脚本
+export const genScripts = (data) => {
   return http.request({
-    url: '/api/monitor/terminalOnlineRecords',
-    method: 'get',
-    params: { ...data },
-    // data:{...data,token}
+    url: '/api/gen/llm/gen_script',
+    method: 'post',
+    data,
+  })
+}
+
+//分镜视频检索
+export const searchVideo = (data) => {
+  return http.request({
+    url: '/api/search/video',
+    method: 'post',
+    data,
+  })
+}
+
+//替换音频
+export const genTts = (data) => {
+  return http.request({
+    url: '/api/gen/tts',
+    method: 'post',
+    data,
+  })
+}
+
+//视频导出
+export const exportVideo = (data) => {
+  return http.request({
+    url: '/api/export/video',
+    method: 'post',
+    data,
   })
 }

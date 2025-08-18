@@ -1,11 +1,12 @@
 <script setup>
 // import { storeToRefs } from 'pinia';
 import {
-  User, DataAnalysis, Check, Star, ShoppingCart, Upload, Search, Operation, ArrowLeft, ArrowRight,
+  User, DataAnalysis, Star, ShoppingCart, Upload, Search, Operation, ArrowLeft, ArrowRight,
   InfoFilled, ChatDotRound, Picture, Platform, Plus, Rank, Edit, Delete, VideoPlay, StarFilled, Back, Right
 } from '@element-plus/icons-vue'
 import { onMounted, ref, reactive, computed } from 'vue'
 import { EVENT_CODE, ElMessage, ElMessageBox } from 'element-plus'
+import { genProdTags } from '@/api/generate.js'
 
 const workState = ref('')
 const workStep = ref('')
@@ -22,9 +23,9 @@ const selectedLanguage = ref('english');
 const fileList = ref([]);
 
 const form = reactive({
-  productName: '',
+  prod_name: '',
   region: '',
-  tags: [],
+  prod_tags: [],
 })
 
 // 是否已提交表单
@@ -40,69 +41,64 @@ onMounted(() => {
 })
 
 const generateSellingPoints = () => {
-  // In a real app, this would call an API to generate points based on input
-  if (!form.productName) {
+  if (!form.prod_name) {
     ElMessage.warning('请先输入商品名称');
     return;
   }
 
-  ElMessage.success('AI 正在分析您的商品特点...');
-  // Simulate API call delay
-  setTimeout(() => {
-    // Add a new suggested point based on input
-    const newTags = [
-      '超长续航，单次充电可持续使用48小时',
-      'IP68级防水防尘，水下可用30分钟',
-      '创新双重降噪技术，通话更清晰'
-    ];
-    generateTags.value = newTags
+  // ElMessage.success('AI 正在分析您的商品特点...');
+
+  genProdTags(form).then(res => {
+    generateTags.value = res.data.data.tags
     console.log(generateTags.value)
-    ElMessage.success('已生成新的卖点建议');
-  }, 1000);
+  })
 };
 
 const onSubmit = () => {
-  form.tags = [...form.tags, ...selectedTags.value]
-  console.log(form.tags)
-  ElMessage.success('正在分析商品信息...');
+  form.prod_tags = [...form.prod_tags, ...selectedTags.value]
+  console.log(form.prod_tags)
+  debugger
+  // ElMessage.success('正在分析商品信息...');
   isPersonaSubmitted.value = true
-  workState.value = 'analyze'
-  // In a real app, this would trigger the AI analysis
+  // workState.value = 'analyze'
+
   setTimeout(() => {
-    const audienceGroups = [
-      {
-        id: 1,
-        title: '25-35 岁户外运动爱好者',
-        matchRate: 95,
-        age: '年龄：25-35 岁，以都市白领为主',
-        interests: '兴趣：户外运动、健身、摄影、旅行',
-        motivation: '消费动机：追求高品质生活，注重产品性能与设计'
-      },
-      {
-        id: 2,
-        title: '35-45 岁家庭主导购者',
-        matchRate: 85,
-        age: '年龄：35-45 岁，已婚有子女',
-        interests: '兴趣：亲子活动、家庭旅行、烹饪',
-        motivation: '消费动机：关注产品实用性与性价比，重视家人使用体验'
-      },
-      {
-        id: 3,
-        title: '18-24 岁年轻时尚群体',
-        matchRate: 75,
-        age: '年龄：18-24 岁，学生及职场新人',
-        interests: '兴趣：社交媒体、时尚潮流、音乐、游戏',
-        motivation: '消费动机：追求个性化与时尚感，易受网红推荐影响'
-      }
-    ]
     ElMessage.success('分析完成，已推荐最匹配的目标人群');
     // Highlight the first audience group
-
-    selectAudience(audienceGroups[0]);
+    selectAudience(audienceGroups.value[0]);
     workState.value = 'finish'
     loading.value = false
   }, 1500);
 }
+
+const audienceGroups = ref([
+  {
+    id: 1,
+    title: '25-35 岁户外运动爱好者',
+    matchRate: 95,
+    age: '年龄：25-35 岁，以都市白领为主',
+    interests: '兴趣：户外运动、健身、摄影、旅行',
+    motivation: '消费动机：追求高品质生活，注重产品性能与设计'
+  },
+  {
+    id: 2,
+    title: '35-45 岁家庭主导购者',
+    matchRate: 85,
+    age: '年龄：35-45 岁，已婚有子女',
+    interests: '兴趣：亲子活动、家庭旅行、烹饪',
+    motivation: '消费动机：关注产品实用性与性价比，重视家人使用体验'
+  },
+  {
+    id: 3,
+    title: '18-24 岁年轻时尚群体',
+    matchRate: 75,
+    age: '年龄：18-24 岁，学生及职场新人',
+    interests: '兴趣：社交媒体、时尚潮流、音乐、游戏',
+    motivation: '消费动机：追求个性化与时尚感，易受网红推荐影响'
+  }
+]);
+
+const selectedAudience = ref(audienceGroups.value[0]);
 
 const selectAudience = (audience) => {
   selectedAudience.value = audience;
@@ -139,11 +135,6 @@ const goFinish = () => {
   active.value = 3
 
 };
-
-// Audience groups data
-const audienceGroups = ref();
-
-const selectedAudience = ref();
 
 
 // Select platform
@@ -328,13 +319,13 @@ const removeScene = (index) => {
         <el-form :model="form" :class="{ 'shrink-persona-form': isPersonaSubmitted }" label-width="auto">
           <h2 class="section-title">商品信息</h2>
           <el-form-item label="商品名称" :label-position="right">
-            <el-input v-model="form.productName" />
+            <el-input v-model="form.prod_name" />
           </el-form-item>
           <el-form-item label="售卖区域" :label-position="right">
             <el-input v-model="form.region" />
           </el-form-item>
           <el-form-item label="商品核心卖点" :label-position="right">
-            <el-input-tag v-model="form.tags" :max="6" :trigger="EVENT_CODE.space"
+            <el-input-tag v-model="form.prod_tags" :max="6" :trigger="EVENT_CODE.space"
               placeholder="请输入标签，按空格键添加，核心卖点总数不超过6个">
               <template #suffix><el-button class="ai-generate-button" :icon="Operation"
                   @click="generateSellingPoints" /></template>
