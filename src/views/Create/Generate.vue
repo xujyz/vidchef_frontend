@@ -2,35 +2,68 @@
 // import { storeToRefs } from 'pinia';
 import {
   User, DataAnalysis, Star, ShoppingCart, Upload, Search, Operation, ArrowLeft, ArrowRight,
-  InfoFilled, ChatDotRound, Picture, Platform, Plus, Rank, Edit, Delete, VideoPlay, StarFilled, Back, Right
+  InfoFilled, ChatDotRound, Picture, Platform, Plus, Rank, Edit, Delete, VideoPlay, StarFilled, VideoPause
 } from '@element-plus/icons-vue'
-import { onMounted, ref, reactive, computed } from 'vue'
+import { onMounted, ref, reactive, computed, nextTick } from 'vue'
 import { EVENT_CODE, ElMessage, ElMessageBox } from 'element-plus'
-import { genProdTags } from '@/api/generate.js'
+import { genProdTags, genTargetConsr, genScripts } from '@/api/generate.js'
 
 const workState = ref('')
 const workStep = ref('')
 const loading = ref(false)
 const active = ref(0)
 
+// 是否已提交表单
+const isPersonaSubmitted = ref(false);
+const isTemplateSubmitted = ref(false);
+
 const generateTags = ref([])  // 存储后端返回的 checkbox tags 选项
 const selectedTags = ref([])   // 存储选中的tags 值
-const genTagLoading = ref(false)     // 控制按钮 loading 状态
+const streamContent = ref('')
+const streamCompleted = ref(false)
+const streamOutputRef = ref(null);
+const audienceResData = ref([])
+const cancelRequest = ref(null)
+const audienceGroups = ref([])
+const selectedAudience = ref()
 
 // Selected options
 const selectedPlatform = ref('tiktok');
 const selectedLanguage = ref('english');
 const fileList = ref([]);
+const templateList = ref([])
+
+const scriptList = ref([]);
+const scriptDemo = ref([])
+const selectedChapter = ref(-1);
+const selectedScene = ref(-1);
+const currentScene = computed(() => {
+  if (
+    selectedChapter.value !== -1 &&
+    selectedScene.value !== -1 &&
+    scriptList.value[selectedChapter.value] &&
+    scriptList.value[selectedChapter.value].scene[selectedScene.value]
+  ) {
+    return scriptList.value[selectedChapter.value].scene[selectedScene.value];
+  }
+  return null;
+});
+// const selectedSceneIndex = ref(0);
+const activeTab = ref('scene');
+// 视频相关
+const videoRef = ref(null);
+const currentTime = ref(0);
+const videoDuration = ref(0);
 
 const form = reactive({
   prod_name: '',
   region: '',
   prod_tags: [],
+  prod_imgs: ['a'],
+  target_consumer: "a",
+  script_template: "a",
+  script_list: []
 })
-
-// 是否已提交表单
-const isPersonaSubmitted = ref(false);
-const isTemplateSubmitted = ref(false);
 
 onMounted(() => {
   workState.value = 'input'
@@ -57,48 +90,114 @@ const generateSellingPoints = () => {
 const onSubmit = () => {
   form.prod_tags = [...form.prod_tags, ...selectedTags.value]
   console.log(form.prod_tags)
-  debugger
-  // ElMessage.success('正在分析商品信息...');
-  isPersonaSubmitted.value = true
-  // workState.value = 'analyze'
+  ElMessage.success('正在分析商品信息...');
 
-  setTimeout(() => {
-    ElMessage.success('分析完成，已推荐最匹配的目标人群');
-    // Highlight the first audience group
-    selectAudience(audienceGroups.value[0]);
-    workState.value = 'finish'
-    loading.value = false
-  }, 1500);
+  // workState.value = 'analyze'
+  // 重置流式输出结果
+  streamContent.value = ''
+  streamCompleted.value = false
+  audienceResData.value = []
+
+  // 提交请求并处理流式响应
+  cancelRequest.value = genTargetConsr(
+    { ...form },
+    handleStreamMessage,
+    handleStreamComplete,
+    handleStreamError
+  );
+
+  // 标记为已提交，显示右侧区域
+  isPersonaSubmitted.value = true
 }
 
-const audienceGroups = ref([
-  {
-    id: 1,
-    title: '25-35 岁户外运动爱好者',
-    matchRate: 95,
-    age: '年龄：25-35 岁，以都市白领为主',
-    interests: '兴趣：户外运动、健身、摄影、旅行',
-    motivation: '消费动机：追求高品质生活，注重产品性能与设计'
-  },
-  {
-    id: 2,
-    title: '35-45 岁家庭主导购者',
-    matchRate: 85,
-    age: '年龄：35-45 岁，已婚有子女',
-    interests: '兴趣：亲子活动、家庭旅行、烹饪',
-    motivation: '消费动机：关注产品实用性与性价比，重视家人使用体验'
-  },
-  {
-    id: 3,
-    title: '18-24 岁年轻时尚群体',
-    matchRate: 75,
-    age: '年龄：18-24 岁，学生及职场新人',
-    interests: '兴趣：社交媒体、时尚潮流、音乐、游戏',
-    motivation: '消费动机：追求个性化与时尚感，易受网红推荐影响'
-  }
-]);
+const handleStreamMessage = (data) => {
+  console.log('前端收到的数据:', data); // 关键日志：确认数据是否到达这里
 
-const selectedAudience = ref(audienceGroups.value[0]);
+  if (!data || typeof data !== 'object') {
+    console.warn('无效数据格式:', data);
+    return;
+  }
+
+  // 处理流式内容
+  if (data.type === 'content' && typeof data.data === 'string') {
+    const text = data.data;
+    let currentPos = 0;
+
+    const typeWriter = () => {
+      if (currentPos < text.length) {
+        streamContent.value += text.charAt(currentPos);
+        currentPos++;
+        setTimeout(typeWriter, 1000);
+      } else {
+        scrollToBottom();
+      }
+    };
+
+    typeWriter();
+  }
+
+  // 处理最终结果
+  if (data.type === 'result' && Array.isArray(data.data)) {
+    // resultData.value = data.data;
+    audienceResData.value = data.data
+    console.log(audienceResData.value)
+
+    audienceGroups.value = [
+      {
+        id: 1,
+        title: '25-35 岁户外运动爱好者',
+        matchRate: 95,
+        age: '年龄：25-35 岁，以都市白领为主',
+        interests: '兴趣：户外运动、健身、摄影、旅行',
+        motivation: '消费动机：追求高品质生活，注重产品性能与设计'
+      },
+      {
+        id: 2,
+        title: '35-45 岁家庭主导购者',
+        matchRate: 85,
+        age: '年龄：35-45 岁，已婚有子女',
+        interests: '兴趣：亲子活动、家庭旅行、烹饪',
+        motivation: '消费动机：关注产品实用性与性价比，重视家人使用体验'
+      },
+      {
+        id: 3,
+        title: '18-24 岁年轻时尚群体',
+        matchRate: 75,
+        age: '年龄：18-24 岁，学生及职场新人',
+        interests: '兴趣：社交媒体、时尚潮流、音乐、游戏',
+        motivation: '消费动机：追求个性化与时尚感，易受网红推荐影响'
+      }
+    ]
+    console.log(audienceGroups.value)
+
+    selectedAudience.value = audienceGroups.value[0]
+    console.log(selectedAudience.value)
+  }
+};
+
+
+// 处理流结束
+const handleStreamComplete = () => {
+  streamCompleted.value = true;
+  ElMessage.success('分析完成');
+  scrollToBottom();
+};
+
+// 处理流错误
+const handleStreamError = (error) => {
+  console.error('流式请求错误:', error);
+  ElMessage.error(`分析失败: ${error.message}`);
+  isSubmitting.value = false;
+};
+
+// 滚动到底部
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (streamOutputRef.value) {
+      streamOutputRef.value.scrollTop = streamOutputRef.value.scrollHeight;
+    }
+  });
+};
 
 const selectAudience = (audience) => {
   selectedAudience.value = audience;
@@ -112,30 +211,42 @@ const goToNextStep = () => {
   workStep.value = 'template'
   active.value = 1
 
+  templateList.value = [
+    {
+      id: 1,
+      timing: "0-3s",
+      title: "痛点开场",
+      description: "展示用户在日常生活中遇到的问题和困扰，引发共鸣",
+      tag: {
+        type: "warning",
+        icon: Search,
+        text: "线上搜索"
+      }
+    },
+    {
+      id: 2,
+      timing: "4-8s",
+      title: "产品特写",
+      description: "通过细节特写展示产品的核心优势和独特卖点",
+      tag: {
+        type: "primary",
+        icon: Upload,
+        text: "用户上传"
+      }
+    },
+    {
+      id: 3,
+      timing: "9-15s",
+      title: "功能演示",
+      description: "深入展示产品的主要功能和使用场景，突出实用性",
+      tag: {
+        type: "success",
+        icon: Operation,
+        text: "AI 生成"
+      }
+    }
+  ]
 };
-
-const generateVideo = () => {
-  // if (fileList.value.length === 0) {
-  //   ElMessage.warning('请先上传视频素材并完成分析');
-  //   return;
-  // }
-
-  ElMessage.success('正在生成视频，即将跳转到视频生成页面');
-  // In a real app, this would navigate to the next page or update the current step
-  workStep.value = 'storyboard'
-  active.value = 2
-
-};
-
-const goFinish = () => {
-  // Navigate to the next step (template matching)
-  ElMessage.success('已完成');
-  // In a real app, this would navigate to the next page or update the current step
-  // workStep.value = 'persona'
-  active.value = 3
-
-};
-
 
 // Select platform
 const selectPlatform = (platform) => {
@@ -164,7 +275,7 @@ const getLanguageName = (language) => {
   const names = {
     'chinese': '中文',
     'english': '英语',
-    'spanish': '葡萄牙语',
+    'portuguese': '葡萄牙语',
   };
   return names[language] || language;
 };
@@ -233,46 +344,140 @@ const goToPreviousStep = () => {
   });
 };
 
-// Generate video
+const generateVideo = async () => {
+  // if (fileList.value.length === 0) {
+  //   ElMessage.warning('请先上传视频素材并完成分析');
+  //   return;
+  // }
 
-// Scene data
-const scenes = ref([
-  {
-    thumbnail: 'https://ai-public.mastergo.com/ai/img_res/0f9722a333b0f748c9c0381417c1253a.jpg',
-    duration: '00:11',
-    description: '在这个充满不确定性的世界里，很容易感到焦虑和恐惧。让我们一起探索如何通过关注可控的事物来改善心理健康。'
-  },
-  {
-    thumbnail: 'https://ai-public.mastergo.com/ai/img_res/29574c973d6142d89640cb7b513bff30.jpg',
-    duration: '00:14',
-    description: '照顾好自己很重要。通过管理压力水平、保证充足睡眠、保持活力和健康饮食来照顾自己。这些都是改善整体健康和保持心理健康的重要行动。'
-  },
-  {
-    thumbnail: 'https://ai-public.mastergo.com/ai/img_res/c0fe8165eca5eadeb48b59e2b1d8b095.jpg',
-    duration: '00:14',
-    description: '与他人保持联系。联系亲朋好友是减轻焦虑和改善心理健康的好方法。通过电话、短信和社交媒体，在保持适当社交距离的同时保持联系。'
-  },
-  {
-    thumbnail: 'https://ai-public.mastergo.com/ai/img_res/37146370ed97fb5fea1ffa298e411d37.jpg',
-    duration: '00:12',
-    description: '正念练习和放松技巧可以帮助我们缓解压力。每天花一些时间进行深呼吸、冥想或其他放松活动，可以显著改善我们的心理健康状态。'
-  },
-  {
-    thumbnail: 'https://ai-public.mastergo.com/ai/img_res/f8db56908a756841ba8df5a1da9fe2ed.jpg',
-    duration: '00:15',
-    description: '培养兴趣爱好对维护心理健康非常重要。无论是绘画、园艺、运动还是烹饪，找到让自己快乐的活动，并坚持下去，这会让生活更加充实。'
+  ElMessage.success('正在生成视频，即将跳转到视频生成页面');
+  // In a real app, this would navigate to the next page or update the current step
+
+  try {
+    // 开始加载状态
+    loading.value = true;
+
+    // 调用后端接口，传入表单数据
+    const response = await genScripts(form);
+
+    // 存储接口返回的数据
+    scriptDemo.value = response.data.data;
+    scriptList.value = [
+      {
+        chapter: "chapter1",
+        scene: [
+          {
+            scene_id: "chapter_1_scene_1",
+            scene_screen_desc: "Close-up of greasy hands trying to press range hood buttons while cooking, leaving fingerprints and oil stains on the control panel",
+            scene_screen_short_desc: "greasy hands dirty buttons",
+            scene_subtitle: "Tired of touching greasy range hood buttons with dirty hands while cooking?",
+            use_product_self_footage: false,
+            video_url: "https://videos.pexels.com/video-files/33349850/14200302_1080_1920_30fps.mp4",
+            tts_url: "bbb",
+            thumbnail: 'https://ai-public.mastergo.com/ai/img_res/0f9722a333b0f748c9c0381417c1253a.jpg',
+            scene_duration: '00:11'
+          }
+        ]
+      },
+      {
+        "chapter": "Real_Life_Scenario(chapter2)",
+        "scene": [
+          {
+            scene_id: "chapter_Real_Life_Scenario_scene_1",
+            scene_screen_desc: "Busy mother cooking stir-fry, smoke everywhere, trying to adjust range hood with oily hands, children coughing in background",
+            scene_screen_short_desc: "busy mother cooking smoke",
+            scene_subtitle: "Meet Sarah, a busy mom who struggles with her old range hood every dinner time.",
+            use_product_self_footage: false,
+            video_url: 'https://videos.pexels.com/video-files/33377771/14210305_1080_1918_30fps.mp4',
+            tts_url: "ddd",
+            thumbnail: 'https://ai-public.mastergo.com/ai/img_res/29574c973d6142d89640cb7b513bff30.jpg',
+            scene_duration: '00:14'
+          },
+          {
+            scene_id: "chapter_Real_Life_Scenario_scene_2",
+            scene_screen_desc: "Split screen showing before: Sarah's kitchen with lingering smoke and grease stains everywhere vs after: clean, smoke-free kitchen",
+            scene_screen_short_desc: "before after kitchen comparison",
+            scene_subtitle: "Here's how Sarah transformed her cooking experience completely.",
+            use_product_self_footage: false,
+            video_url: "https://videos.pexels.com/video-files/32950328/14043633_1440_2560_60fps.mp4",
+            tts_url: "fff",
+            thumbnail: 'https://ai-public.mastergo.com/ai/img_res/c0fe8165eca5eadeb48b59e2b1d8b095.jpg',
+            scene_duration: '00:14'
+          }
+        ]
+      },
+      {
+        "chapter": "Real_Life_Scenario(chapter3)",
+        "scene": [
+          {
+            scene_id: "chapter_Real_Life_Scenario_scene_1",
+            scene_screen_desc: "Busy mother cooking stir-fry, smoke everywhere, trying to adjust range hood with oily hands, children coughing in background",
+            scene_screen_short_desc: "busy mother cooking smoke",
+            scene_subtitle: "Meet Sarah, a busy mom who struggles with her old range hood every dinner time.",
+            use_product_self_footage: false,
+            video_url: "https://videos.pexels.com/video-files/32904798/14023639_1080_1920_30fps.mp4",
+            tts_url: "ddd",
+            thumbnail: 'https://ai-public.mastergo.com/ai/img_res/37146370ed97fb5fea1ffa298e411d37.jpg',
+            scene_duration: '00:12'
+          },
+          {
+            scene_id: "chapter_Real_Life_Scenario_scene_2",
+            scene_screen_desc: "Split screen showing before: Sarah's kitchen with lingering smoke and grease stains everywhere vs after: clean, smoke-free kitchen",
+            scene_screen_short_desc: "before after kitchen comparison",
+            scene_subtitle: "Here's how Sarah transformed her cooking experience completely.",
+            use_product_self_footage: false,
+            video_url: "https://videos.pexels.com/video-files/33420618/14224991_1080_1920_50fps.mp4",
+            tts_url: "fff",
+            thumbnail: 'https://ai-public.mastergo.com/ai/img_res/c0fe8165eca5eadeb48b59e2b1d8b095.jpg',
+            scene_duration: '00:15'
+          }
+        ]
+      }
+    ]
+
+    form.script_list = scriptList.value
+    console.log(form)
+    console.log("scriptlist", scriptList.value)
+
+    if (scriptList.value.length > 0) {
+      // 选中第一个章节
+      selectedChapter.value = 0;
+
+      // 检查第一个章节是否有分镜
+      const firstChapterScenes = scriptList.value[0].scene;
+      if (firstChapterScenes && firstChapterScenes.length > 0) {
+        // 选中第一个分镜
+        selectedScene.value = 0;
+      }
+    }
+
+    // 更新状态
+    workStep.value = 'storyboard';
+    active.value = 2;
+
+    // 可以在这里添加成功提示
+    ElMessage.success('脚本生成成功');
+  } catch (error) {
+    // 捕获网络或其他异常
+    console.error('调用接口时发生错误:', error);
+  } finally {
+    // 无论成功失败，都结束加载状态
+    loading.value = false;
   }
-]);
+};
 
-const selectedSceneIndex = ref(0);
-const activeTab = ref('scene');
+const selectScene = (chapterIndex, sceneIndex) => {
+  selectedChapter.value = chapterIndex;
+  selectedScene.value = sceneIndex;
+  nextTick(() => {
+    if (videoRef.value) {
+      videoRef.value.load()
+      videoRef.value.play().catch((err) => {
+        console.error("自动播放失败:", err);
+      });
 
-// Computed properties
-const currentScene = computed(() => scenes.value[selectedSceneIndex.value] || null);
-
-// Methods
-const selectScene = (index) => {
-  selectedSceneIndex.value = index;
+    }
+  });
 };
 
 const removeScene = (index) => {
@@ -281,21 +486,74 @@ const removeScene = (index) => {
     cancelButtonText: '取消',
     type: 'warning'
   }).then(() => {
-    scenes.value.splice(index, 1);
-    ElMessage.success('场景已删除');
+    // scenes.value.splice(index, 1);
+    // ElMessage.success('场景已删除');
 
-    // If the deleted scene was selected, select another one
-    if (index === selectedSceneIndex.value) {
-      selectedSceneIndex.value = Math.min(index, scenes.value.length - 1);
-      if (selectedSceneIndex.value < 0) selectedSceneIndex.value = 0;
-    } else if (index < selectedSceneIndex.value) {
-      // Adjust the selectedSceneIndex if a scene before it was removed
-      selectedSceneIndex.value--;
-    }
+    // // If the deleted scene was selected, select another one
+    // if (index === selectedSceneIndex.value) {
+    //   selectedSceneIndex.value = Math.min(index, scenes.value.length - 1);
+    //   if (selectedSceneIndex.value < 0) selectedSceneIndex.value = 0;
+    // } else if (index < selectedSceneIndex.value) {
+    //   // Adjust the selectedSceneIndex if a scene before it was removed
+    //   selectedSceneIndex.value--;
+    // }
   }).catch(() => {
     // User canceled
   });
 };
+
+// 格式化时间
+const formatTime = (time) => {
+  const minutes = Math.floor(time / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = Math.floor(time % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${minutes}:${seconds}`;
+};
+
+// 视频事件处理
+const handleVideoLoaded = () => {
+  if (videoRef.value) {
+    videoDuration.value = videoRef.value.duration;
+  }
+};
+
+const handleTimeUpdate = () => {
+  if (videoRef.value) {
+    currentTime.value = videoRef.value.currentTime;
+  }
+};
+
+const handleTimeChange = (time) => {
+  if (videoRef.value) {
+    videoRef.value.currentTime = time;
+  }
+};
+
+const goToPreviousStep1 = () => {
+  ElMessageBox.confirm('确定要返回上一步吗？已上传的文件将不会保存。', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(() => {
+    ElMessage.success('正在返回模板匹配页面');
+    workStep.value = 'template'
+  }).catch(() => {
+  });
+};
+
+const goFinish = () => {
+  // Navigate to the next step (template matching)
+  ElMessage.success('已完成');
+  // In a real app, this would navigate to the next page or update the current step
+  workStep.value = 'persona'
+  active.value = 3
+
+};
+
+
 </script>
 
 <template>
@@ -348,6 +606,12 @@ const removeScene = (index) => {
           <Transition name="res-fade">
             <div class="recommendations-container">
               <h2 class="section-title">AI Boss 推荐</h2>
+              <div class="stream-output-container">
+                <div class="stream-output" ref="streamOutputRef">
+                  <p v-if="streamContent === '' && !streamCompleted">正在分析中，请稍候...</p>
+                  <p v-else>{{ streamContent }}</p>
+                </div>
+              </div>
               <div class="audience-groups">
                 <el-card v-for="(audience, index) in audienceGroups" :key="index" class="audience-card"
                   :class="{ 'is-selected': audience.id === selectedAudience.id }" shadow="hover"
@@ -432,11 +696,11 @@ const removeScene = (index) => {
                   <span>英语</span>
                 </el-button>
                 <el-button class="language-button" :class="{ active: selectedLanguage === 'spanish' }"
-                  @click="selectLanguage('spanish')">
+                  @click="selectLanguage('portuguese')">
                   <el-icon>
                     <InfoFilled />
                   </el-icon>
-                  <span>西班牙语</span>
+                  <span>葡萄牙语</span>
                 </el-button>
                 <el-button class="language-button" :class="{ active: selectedLanguage === 'chinese' }"
                   @click="selectLanguage('chinese')">
@@ -492,7 +756,7 @@ const removeScene = (index) => {
                     <i class="fab fa-tiktok template-platform-icon"></i>
                   </div>
                   <div class="template-info">
-                    <div class="template-name">TikTok 爆款模板</div>
+                    <div class="template-name">{{ getPlatformName(selectedPlatform) }} 爆款模板</div>
                     <div class="template-description">适用于产品展示和功能介绍</div>
                   </div>
                 </div>
@@ -500,55 +764,25 @@ const removeScene = (index) => {
                 <!-- Template Sections -->
                 <div class="template-sections">
                   <!-- Section 1 -->
-                  <div class="template-section-item">
-                    <div class="section-timing">
-                      <div class="timing-label">0-3s</div>
-                      <div class="section-title">痛点开场</div>
-                    </div>
-                    <div class="section-content">
-                      <div class="section-description">展示用户在日常生活中遇到的问题和困扰，引发共鸣</div>
-                      <el-tag class="section-tag" type="warning">
-                        <el-icon>
-                          <Search />
-                        </el-icon>
-                        <span>线上搜索</span>
-                      </el-tag>
-                    </div>
-                  </div>
 
-                  <!-- Section 2 -->
-                  <div class="template-section-item">
-                    <div class="section-timing">
-                      <div class="timing-label">4-8s</div>
-                      <div class="section-title">产品特写</div>
+                  <el-card v-for="(section, index) in templateList" :key="index" class="template-section-item"
+                    shadow="hover">
+                    <div class="section-card">
+                      <div class="section-timing">
+                        <div class="timing-label">{{ section.timing }}</div>
+                        <div class="section-title">{{ section.title }}</div>
+                      </div>
+                      <div class="section-content">
+                        <div class="section-description">{{ section.description }}</div>
+                        <el-tag v-if="section.tag" class="section-tag" :type="section.tag.type">
+                          <el-icon>
+                            <component :is="section.tag.icon" />
+                          </el-icon>
+                          <span>{{ section.tag.text }}</span>
+                        </el-tag>
+                      </div>
                     </div>
-                    <div class="section-content">
-                      <div class="section-description">通过细节特写展示产品的核心优势和独特卖点</div>
-                      <el-tag class="section-tag" type="primary">
-                        <el-icon>
-                          <Upload />
-                        </el-icon>
-                        <span>用户上传</span>
-                      </el-tag>
-                    </div>
-                  </div>
-
-                  <!-- Section 3 -->
-                  <div class="template-section-item">
-                    <div class="section-timing">
-                      <div class="timing-label">9-15s</div>
-                      <div class="section-title">功能演示</div>
-                    </div>
-                    <div class="section-content">
-                      <div class="section-description">深入展示产品的主要功能和使用场景，突出实用性</div>
-                      <el-tag class="section-tag" type="success">
-                        <el-icon>
-                          <Operation />
-                        </el-icon>
-                        <span>AI 生成</span>
-                      </el-tag>
-                    </div>
-                  </div>
+                  </el-card>
                 </div>
               </div>
 
@@ -575,50 +809,56 @@ const removeScene = (index) => {
         <div class="storyboard-form">
           <div class="scene-header">
             <h2 class="section-title">分镜列表</h2>
-            <el-button class="add-scene-button">
+            <!-- <el-button class="add-scene-button">
               <el-icon>
                 <Plus />
               </el-icon>
               添加分镜
-            </el-button>
+            </el-button> -->
           </div>
 
           <div class="scene-list">
-            <div v-for="(scene, index) in scenes" :key="index" class="scene-item-wrapper">
-              <el-card class="scene-item" :class="{ 'is-selected': selectedSceneIndex === index }" shadow="hover"
-                @click="selectScene(index)">
-                <div class="scene-content">
-                  <div class="scene-thumbnail">
-                    <el-image :src="scene.thumbnail" fit="cover" class="thumbnail-image" />
-                    <el-button class="replace-button" size="small">替换</el-button>
-                  </div>
-                  <div class="scene-details">
-                    <div class="scene-header">
-                      <div class="scene-title">场景 {{ index + 1 }}</div>
-                      <div class="scene-duration">{{ scene.duration }}</div>
+            <!-- 时间线章节 -->
+            <div v-for="(chapter, chapterIndex) in scriptList" :key="chapterIndex" class="chapter-timeline">
+              <div class="chapter-name">{{ chapter.chapter }}</div>
+              <!-- 分镜项 -->
+              <div v-for="(scene, sceneIndex) in chapter.scene" :key="scene.scene_id" class="scene-item-wrapper"
+                @click="selectScene(chapterIndex, sceneIndex)">
+                <el-card class="scene-item"
+                  :class="{ 'is-selected': selectedChapter === chapterIndex && selectedScene === sceneIndex }"
+                  shadow="hover">
+                  <div class="scene-content">
+                    <div class="scene-thumbnail">
+                      <el-image :src="scene.thumbnail" fit="cover" class="thumbnail-image" />
+                      <el-button class="replace-button" size="small">替换</el-button>
                     </div>
-                    <el-input v-model="scene.description" type="textarea" :rows="4" resize="none" placeholder="编辑场景描述"
-                      class="scene-description" />
+                    <div class="scene-details">
+                      <div class="scene-header">
+                        <div class="scene-title">{{ scene.scene_subtitle }}</div>
+                        <div class="scene-duration">{{ scene.scene_duration }}</div>
+                      </div>
+                      <el-input v-model="scene.scene_screen_desc" type="textarea" :rows="2" resize="none"
+                        placeholder="编辑场景字幕" class="scene-description" />
+                    </div>
                   </div>
+                </el-card>
+                <div class="scene-actions">
+                  <el-button circle class="action-button">
+                    <el-icon>
+                      <Rank />
+                    </el-icon>
+                  </el-button>
+                  <el-button circle class="action-button">
+                    <el-icon>
+                      <Edit />
+                    </el-icon>
+                  </el-button>
+                  <el-button circle class="action-button" @click="removeScene(index)">
+                    <el-icon>
+                      <Delete />
+                    </el-icon>
+                  </el-button>
                 </div>
-              </el-card>
-
-              <div class="scene-actions">
-                <el-button circle class="action-button">
-                  <el-icon>
-                    <Rank />
-                  </el-icon>
-                </el-button>
-                <el-button circle class="action-button">
-                  <el-icon>
-                    <Edit />
-                  </el-icon>
-                </el-button>
-                <el-button circle class="action-button" @click="removeScene(index)">
-                  <el-icon>
-                    <Delete />
-                  </el-icon>
-                </el-button>
               </div>
             </div>
           </div>
@@ -635,35 +875,31 @@ const removeScene = (index) => {
 
           <!-- Video Preview -->
           <div class="video-preview-container">
-            <el-image :src="currentScene?.thumbnail || ''" fit="cover" class="video-preview" />
-            <div class="play-button-overlay">
-              <el-button class="play-button" circle>
-                <el-icon>
-                  <VideoPlay />
-                </el-icon>
-              </el-button>
+            <video v-if="currentScene" ref="videoRef" :src="currentScene.video_url" controls class="video-preview"
+              @loadeddata="handleVideoLoaded" @timeupdate="handleTimeUpdate">
+              您的浏览器不支持视频播放
+            </video>
+            <div class="video-subtitle-overlay" v-if="currentScene">
+              <p>{{ currentScene.scene_screen_desc }}</p>
             </div>
           </div>
 
           <!-- Video Controls -->
           <div class="video-controls">
             <div class="playback-controls">
-              <el-button circle class="control-button">
-                <el-icon>
-                  <Back />
-                </el-icon>
-              </el-button>
-              <el-button circle class="control-button">
+              <el-button circle class="control-button" @click="videoRef?.play()">
                 <el-icon>
                   <VideoPlay />
                 </el-icon>
               </el-button>
-              <el-button circle class="control-button">
+              <el-button circle class="control-button" @click="videoRef?.pause()">
                 <el-icon>
-                  <Right />
+                  <VideoPause />
                 </el-icon>
               </el-button>
-              <span class="time-display">01:30 / 01:42</span>
+              <span class="time-display" v-if="videoDuration">
+                {{ formatTime(currentTime) }} / {{ formatTime(videoDuration) }}
+              </span>
             </div>
             <div class="feedback-controls">
               <el-button circle class="control-button">
@@ -680,19 +916,16 @@ const removeScene = (index) => {
           </div>
 
           <!-- Progress Bar -->
-          <div class="progress-container">
-            <div class="progress-bar" :style="{ '--progress': '70%' }">
-              <div class="scene-markers">
-                <div class="scene-marker" style="width: 33.33%"></div>
-                <div class="scene-marker" style="width: 33.33%"></div>
-                <div class="scene-marker" style="width: 33.33%"></div>
-              </div>
-              <div class="progress-handle" style="left: 70%">
-                <div class="handle-dot"></div>
-              </div>
-            </div>
+          <div class="progress-container" v-if="videoDuration">
+            <el-slider v-model="currentTime" :max="videoDuration" @change="handleTimeChange" class="video-progress" />
           </div>
-          <div class="recommendations-container">
+          <div class="action-buttons">
+            <el-button @click="goToPreviousStep1">
+              <el-icon>
+                <ArrowLeft />
+              </el-icon>
+              <span>上一步</span>
+            </el-button>
             <el-button type="primary" class="next-button" @click="goFinish">
               完成
             </el-button>
@@ -807,6 +1040,23 @@ const removeScene = (index) => {
 
     .persona-res {
       flex: 1;
+
+      .stream-output-container {
+        flex: 1;
+        margin: 10px 0;
+        overflow: hidden;
+      }
+
+      .stream-output {
+        height: 100%;
+        overflow-y: auto;
+        padding: 15px;
+        background-color: #f9f9f9;
+        border-radius: 4px;
+        line-height: 1.8;
+        font-size: 14px;
+        white-space: pre-wrap;
+      }
 
       /* Recommendations section */
       .recommendations-container {
@@ -1061,10 +1311,14 @@ const removeScene = (index) => {
       }
 
       .template-card {
-        :deep(.el-card__body) {
-          padding: 1.5rem;
-          border-radius: 8px;
-          box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+        cursor: pointer;
+        margin-bottom: 0 !important;
+
+        &.is-selected {
+          :deep(.el-card__body) {
+            border: 1px solid #2563eb;
+            border-radius: 0.5rem;
+          }
         }
       }
 
@@ -1120,6 +1374,15 @@ const removeScene = (index) => {
       .template-section-item {
         display: flex;
         gap: 1rem;
+
+        :deep(.el-card__body) {
+          width: 100%;
+        }
+      }
+
+      .section-card {
+        display: flex;
+        width: 100%;
       }
 
       .section-timing {
@@ -1150,8 +1413,15 @@ const removeScene = (index) => {
         gap: 0.25rem;
         font-size: 0.75rem;
 
+        :deep(.el-tag__content) {
+          margin-right: 0.25rem;
+          display: contents;
+          align-items: center;
+        }
+
         :deep(.el-icon) {
           margin-right: 0.25rem;
+          align-items: center;
         }
       }
 
@@ -1188,7 +1458,7 @@ const removeScene = (index) => {
       margin: 2rem;
       padding: 2rem;
       border-radius: 8px;
-      transition: all 0.5s ease-in-out;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
 
       .scene-header {
         display: flex;
@@ -1210,22 +1480,26 @@ const removeScene = (index) => {
       }
 
       .scene-list {
-        overflow-y: auto;
-        height: calc(100vh - 130px);
-        padding-right: 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
 
-        &::-webkit-scrollbar {
-          width: 6px;
-        }
+      .chapter-timeline {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding-left: 10px;
+        border-left: 3px solid #e5e7eb;
+        margin-left: 10px;
+      }
 
-        &::-webkit-scrollbar-track {
-          background: #f1f1f1;
-        }
-
-        &::-webkit-scrollbar-thumb {
-          background: #888;
-          border-radius: 3px;
-        }
+      .chapter-name {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #2563eb;
+        margin-left: 0.5rem;
+        padding-top: 5px;
       }
 
       .scene-item-wrapper {
@@ -1265,8 +1539,8 @@ const removeScene = (index) => {
 
       .scene-thumbnail {
         position: relative;
-        width: 6rem;
-        height: 6rem;
+        width: 8rem;
+        height: 8rem;
         border-radius: 0.375rem;
         overflow: hidden;
         flex-shrink: 0;
@@ -1289,7 +1563,7 @@ const removeScene = (index) => {
 
       .scene-details {
         flex: 1;
-        min-height: 7.5rem;
+        min-height: 8rem;
         display: flex;
         flex-direction: column;
       }
@@ -1302,7 +1576,7 @@ const removeScene = (index) => {
       }
 
       .scene-title {
-        font-size: 1.125rem;
+        font-size: 1.25rem;
         font-weight: 500;
       }
 
@@ -1343,6 +1617,9 @@ const removeScene = (index) => {
 
     .storyboard-res {
       flex: 1;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+      margin-top: 2rem;
+      padding: 2rem;
 
       .preview-header {
         display: flex;
@@ -1363,8 +1640,8 @@ const removeScene = (index) => {
 
       .video-preview-container {
         position: relative;
-        width: 400px;
-        height: 600px;
+        width: 500px;
+        // height: 600px;
         margin: 0 auto 1rem;
         border-radius: 0.5rem;
         overflow: hidden;
@@ -1373,6 +1650,28 @@ const removeScene = (index) => {
       .video-preview {
         width: 100%;
         height: 100%;
+        object-fit: cover;
+      }
+
+      .video-subtitle-overlay {
+        position: absolute;
+        bottom: 50px;
+        left: 0;
+        right: 0;
+        padding: 0 20px;
+        text-align: center;
+        color: white;
+        font-size: 1.125rem;
+        text-shadow: 0 0 3px rgba(0, 0, 0, 0.7);
+        // text-stroke: 2px #000000;
+        -webkit-text-stroke: 0.5px #000000;
+      }
+
+      .video-controls {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
       }
 
       .play-button-overlay {
@@ -1381,18 +1680,6 @@ const removeScene = (index) => {
         display: flex;
         align-items: center;
         justify-content: center;
-      }
-
-      .play-button {
-        width: 4rem;
-        height: 4rem;
-        background-color: rgba(255, 255, 255, 0.2);
-        backdrop-filter: blur(4px);
-
-        .el-icon {
-          font-size: 1.5rem;
-          color: #ffffff;
-        }
       }
 
       .video-controls {
@@ -1419,19 +1706,12 @@ const removeScene = (index) => {
       }
 
       .progress-container {
-        position: relative;
         width: 100%;
-        height: 4px;
-        background-color: #e5e7eb;
-        border-radius: 9999px;
-        overflow: hidden;
+        margin-bottom: 1rem;
       }
 
-      .progress-bar {
+      .video-progress {
         width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, #246BFD var(--progress), #e5e7eb var(--progress));
-        position: relative;
       }
 
       .scene-markers {
@@ -1463,6 +1743,23 @@ const removeScene = (index) => {
         border-radius: 50%;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         transform: translateX(-50%);
+      }
+
+      .action-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        margin-top: 1.5rem;
+
+        :deep(.el-button) {
+          padding: 0.625rem 1.5rem;
+          display: flex;
+          align-items: center;
+
+          .el-icon {
+            margin: 0 0.25rem;
+          }
+        }
       }
     }
   }
