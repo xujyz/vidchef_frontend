@@ -1,662 +1,420 @@
 <template>
-    <div class="main-content">
-        <div class="work-content" v-show="workStep === 'storyboard'">
-            <div class="storyboard-form">
-                <div class="scene-header">
-                    <h2 class="section-title">分镜列表</h2>
-                </div>
+    <div class="video-player-page">
+        <div class="video-container">
+            <!-- 视频元素 -->
+            <video ref="videoRef" :src="videoSource" :poster="coverPic" class="main-video"
+                @timeupdate="handleTimeUpdate" @loadedmetadata="handleLoadedMetadata" @play="handlePlay"
+                @pause="handlePause" @click="togglePlayPause"></video>
 
-                <div class="scene-list">
-                    <!-- 时间线章节 -->
-                    <div v-for="(chapter, chapterIndex) in scriptList" :key="chapterIndex" class="chapter-timeline">
-                        <div class="chapter-name">{{ chapter.chapter }}</div>
-                        <!-- 分镜项 -->
-                        <div v-for="(scene, sceneIndex) in chapter.scene" :key="scene.scene_id"
-                            class="scene-item-wrapper" @click="selectScene(chapterIndex, sceneIndex)">
-                            <el-card class="scene-item"
-                                :class="{ 'is-selected': selectedChapter === chapterIndex && selectedScene === sceneIndex }"
-                                shadow="hover">
-                                <div class="scene-content">
-                                    <div class="scene-thumbnail">
-                                        <el-image :src="scene.video_url || 'https://via.placeholder.com/100'"
-                                            fit="cover" class="thumbnail-image" />
-                                        <el-button class="replace-button" size="small">替换</el-button>
-                                    </div>
-                                    <div class="scene-details">
-                                        <div class="scene-header">
-                                            <div class="scene-title">{{ scene.scene_id }}</div>
-                                            <div class="scene-duration">{{ scene.scene_duration }}</div>
-                                        </div>
-                                        <el-input v-model="scene.scene_screen_desc" type="textarea" :rows="2"
-                                            resize="none" placeholder="编辑场景字幕" class="scene-description" />
-                                    </div>
-                                </div>
-                            </el-card>
-                            <div class="scene-actions">
-                                <el-button circle class="action-button">
-                                    <el-icon>
-                                        <Rank />
-                                    </el-icon>
-                                </el-button>
-                                <el-button circle class="action-button">
-                                    <el-icon>
-                                        <Edit />
-                                    </el-icon>
-                                </el-button>
-                                <el-button circle class="action-button" @click="removeScene(index)">
-                                    <el-icon>
-                                        <Delete />
-                                    </el-icon>
-                                </el-button>
-                            </div>
-                        </div>
-                    </div>
+            <!-- 音频元素 -->
+            <audio ref="audioRef" :src="audioSource" class="hidden-audio">
+            </audio>
+
+            <!-- 字幕显示层 -->
+            <div class="subtitle-overlay" v-if="currentSubtitle && isSubtitleActive">
+                <p class="subtitle-text" v-html="formattedSubtitle"></p>
+            </div>
+
+            <!-- 控制栏 -->
+            <div class="video-controls" :class="{ 'visible': showControls }">
+                <div class="progress-bar">
+                    <el-slider v-model="currentTime" :max="totalDuration" @change="seekTo" class="custom-slider" />
+                </div>
+                <div class="control-buttons">
+                    <el-button circle :icon="isPlaying ? VideoPause : VideoPlay" class="play-button"
+                        @click="togglePlayPause" />
+                    <el-button circle :icon="isMuted ? Mute : Microphone" class="volume-button" @click="toggleMute" />
+                    <span class="time-display">
+                        {{ formatTime(currentTime) }} / {{ formatTime(totalDuration) }}
+                    </span>
                 </div>
             </div>
-            <div class="storyboard-res">
-                <div class="preview-header">
-                    <div class="preview-tabs">
-                        <el-button :type="activeTab === 'scene' ? 'primary' : ''"
-                            @click="activeTab = 'scene'">分镜</el-button>
-                        <el-button :type="activeTab === 'settings' ? 'primary' : ''"
-                            @click="activeTab = 'settings'">设置</el-button>
-                    </div>
-                    <div class="preview-quality">预览：480P</div>
-                </div>
+        </div>
 
-                <!-- 视频预览 -->
-                <div class="video-preview-container">
-                    <video v-if="currentScene" ref="videoRef" :src="currentScene.video_url" controls
-                        class="video-preview" @loadeddata="handleVideoLoaded" @timeupdate="handleTimeUpdate">
-                        您的浏览器不支持视频播放
-                    </video>
-                    <div v-else class="video-placeholder">
-                        <el-icon class="placeholder-icon">
-                            <VideoPlay />
-                        </el-icon>
-                        <p>请选择分镜</p>
-                    </div>
-
-                    <!-- 视频字幕覆盖层 -->
-                    <div class="video-subtitle-overlay" v-if="currentScene">
-                        <p>{{ currentScene.scene_subtitle }}</p>
-                    </div>
-                </div>
-
-                <!-- 视频控制和进度条等 -->
-                <div class="video-controls">
-                    <div class="playback-controls">
-                        <el-button circle class="control-button" @click="videoRef?.play()">
-                            <el-icon>
-                                <VideoPlay />
-                            </el-icon>
-                        </el-button>
-                        <el-button circle class="control-button" @click="videoRef?.pause()">
-                            <el-icon>
-                                <Pause />
-                            </el-icon>
-                        </el-button>
-                        <span class="time-display" v-if="videoDuration">
-                            {{ formatTime(currentTime) }} / {{ formatTime(videoDuration) }}
-                        </span>
-                    </div>
-                </div>
-                <div class="progress-container" v-if="videoDuration">
-                    <el-slider v-model="currentTime" :max="videoDuration" @change="handleTimeChange"
-                        class="video-progress" />
-                </div>
-                <div class="action-buttons">
-                    <el-button @click="goToPreviousStep1">
-                        <el-icon>
-                            <ArrowLeft />
-                        </el-icon>
-                        <span>上一步</span>
-                    </el-button>
-                    <el-button type="primary" class="next-button" @click="goFinish">
-                        完成
-                    </el-button>
-                </div>
-            </div>
+        <div class="video-info">
+            <h2 class="video-title">{{ videoTitle }}</h2>
+            <p class="video-desc">音画同步播放器示例 - 带逐字高亮字幕</p>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ArrowLeft, Plus, VideoPlay } from "@element-plus/icons-vue";
-import { onMounted, ref, reactive, computed, nextTick, onUnmounted } from "vue";
-import { ElMessage, ElMessageBox, ElSlider, ElCard, ElImage, ElButton, ElInput, ElIcon } from "element-plus";
-import { genScripts } from "@/api/generate.js";
+import { ref, onMounted } from 'vue';
+import { ElSlider, ElButton, ElMessage } from 'element-plus';
+import { VideoPlay, VideoPause, Microphone, Mute } from '@element-plus/icons-vue';
 
-// 状态管理
-const workStep = ref("storyboard");
-const loading = ref(false);
-const activeTab = ref('scene');
-
-// 表单数据
-const form = reactive({
-    prod_name: 'a',
-    region: 'e',
-    prod_tags: ['a'],
-    prod_imgs: ['a'],
-    target_consumer: "a",
-    script_template: "a",
-    script_list: []
-});
-
-// 分镜数据管理
-const scriptList = ref([]);
-const selectedChapter = ref(-1);
-const selectedScene = ref(-1);
-const currentScene = computed(() => {
-    if (
-        selectedChapter.value !== -1 &&
-        selectedScene.value !== -1 &&
-        scriptList.value[selectedChapter.value] &&
-        scriptList.value[selectedChapter.value].scene[selectedScene.value]
-    ) {
-        return scriptList.value[selectedChapter.value].scene[selectedScene.value];
+// 媒体资源配置（使用稳定的公开资源）
+const renderInfo = {
+    data: {
+        name: "健康睡眠指南",
+        renderConfig: {
+            children: [
+                {
+                    kind: "primary",
+                    children: [{
+                        children: [{
+                            src: "https://videos.pexels.com/video-files/33377771/14210305_1080_1918_30fps.mp4",
+                            coverPic: "https://ai-public.mastergo.com/ai/img_res/37146370ed97fb5fea1ffa298e411d37.jpg"
+                        }]
+                    }]
+                },
+                {
+                    kind: "text",
+                    children: [{
+                        text: "保持规律作息有助于睡眠",
+                        start: 0,  // 字幕开始时间（秒）
+                        end: 9,   // 字幕结束时间（秒）
+                        wordBoundars: [
+                            { audioOffset: 0, duration: 2, text: "保持" },  // 相对于字幕start的偏移
+                            { audioOffset: 2, duration: 2, text: "规律" },
+                            { audioOffset: 4, duration: 2, text: "作息" },
+                            { audioOffset: 6, duration: 2, text: "有助于" },
+                            { audioOffset: 8, duration: 1, text: "睡眠" }
+                        ]
+                    }]
+                },
+                {
+                    kind: "audio",
+                    children: [{
+                        src: "https://lv-sycdn.kuwo.cn/6b8cb0744b4a6c336dd519c718d8823f/68a72a51/resource/30106/trackmedia/M800004O1DHG4MjYOi.mp3"
+                    }]
+                }
+            ]
+        },
+        coverPic: "https://ai-public.mastergo.com/ai/img_res/37146370ed97fb5fea1ffa298e411d37.jpg"
     }
-    return null;
-});
+};
 
-// 视频相关
+// 解析资源
+const tracks = {
+    video: renderInfo.data.renderConfig.children.find(t => t.kind === 'primary'),
+    subtitle: renderInfo.data.renderConfig.children.find(t => t.kind === 'text'),
+    audio: renderInfo.data.renderConfig.children.find(t => t.kind === 'audio')
+};
+
+// 状态变量
+const videoSource = ref(tracks.video.children[0].children[0].src);
+const audioSource = ref(tracks.audio.children[0].src);
+const coverPic = ref(renderInfo.data.coverPic);
+const videoTitle = ref(renderInfo.data.name);
+
+// 播放器核心状态
 const videoRef = ref(null);
-const currentTime = ref(0);
-const videoDuration = ref(0);
+const audioRef = ref(null);
+const currentTime = ref(0);       // 当前播放时间（秒）
+const totalDuration = ref(0);      // 总时长（秒）
+const isPlaying = ref(false);      // 是否播放中
+const isMuted = ref(false);        // 是否静音
+const showControls = ref(true);    // 控制栏是否显示
+const currentSubtitle = ref(tracks.subtitle.children[0]);  // 当前字幕
+const formattedSubtitle = ref(''); // 带高亮的字幕HTML
+const isSubtitleActive = ref(false); // 字幕是否在有效时间范围内
+const controlTimer = ref(null);    // 控制栏自动隐藏定时器
 
-// 格式化时间
-const formatTime = (time) => {
-    const minutes = Math.floor(time / 60)
-        .toString()
-        .padStart(2, "0");
-    const seconds = Math.floor(time % 60)
-        .toString()
-        .padStart(2, "0");
-    return `${minutes}:${seconds}`;
-};
-
-// 视频事件处理
-const handleVideoLoaded = () => {
+// 1. 处理视频元数据加载（获取总时长）
+const handleLoadedMetadata = () => {
     if (videoRef.value) {
-        videoDuration.value = videoRef.value.duration;
+        totalDuration.value = videoRef.value.duration; // 直接从视频元素获取时长
+        console.log("视频总时长:", totalDuration.value);
     }
 };
 
+// 2. 时间格式化（确保分秒正确）
+const formatTime = (seconds) => {
+    if (isNaN(seconds) || seconds < 0) return '00:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
+
+// 3. 视频播放进度更新（核心同步逻辑）
 const handleTimeUpdate = () => {
     if (videoRef.value) {
-        currentTime.value = videoRef.value.currentTime;
+        currentTime.value = videoRef.value.currentTime; // 实时同步当前时间
+        syncAudioToVideo(); // 同步音频
+        updateSubtitleDisplay(); // 更新字幕高亮
     }
 };
 
-const handleTimeChange = (time) => {
-    if (videoRef.value) {
-        videoRef.value.currentTime = time;
-    }
-};
+// 4. 字幕高亮逻辑（修正时间计算）
+const updateSubtitleDisplay = () => {
+    if (!currentSubtitle.value) return;
 
-// 分镜选择
-const selectScene = (chapterIndex, sceneIndex) => {
-    selectedChapter.value = chapterIndex;
-    selectedScene.value = sceneIndex;
-    nextTick(() => {
-        if (videoRef.value) {
-            videoRef.value.load();
-            videoRef.value.play().catch((err) => {
-                console.error("自动播放失败:", err);
-            });
-        }
+    const { start: subtitleStart, end: subtitleEnd, wordBoundars } = currentSubtitle.value;
+    // 判断当前时间是否在字幕有效范围内（2s ~ 12s）
+    isSubtitleActive.value = currentTime.value >= subtitleStart && currentTime.value <= subtitleEnd;
+
+    if (!isSubtitleActive.value) {
+        formattedSubtitle.value = '';
+        return;
+    }
+
+    // 计算当前时间相对于字幕开始的偏移量（核心修正）
+    const relativeTime = currentTime.value - subtitleStart;
+    let html = '';
+
+    wordBoundars.forEach(word => {
+        const wordStart = word.audioOffset;         // 单词在字幕内的开始时间（如0.2s）
+        const wordEnd = word.audioOffset + word.duration; // 单词结束时间（如0.2+0.8=1.0s）
+        const isActive = relativeTime >= wordStart && relativeTime <= wordEnd;
+
+        html += `<span class="subtitle-word ${isActive ? 'active' : ''}">${word.text}</span>`;
     });
+
+    formattedSubtitle.value = html;
 };
 
-// 获取分镜数据
-const fetchScriptData = async () => {
-    loading.value = true;
-    try {
-        const response = await genScripts(form); // 传入表单数据
-        scriptList.value = [
-            {
-                chapter: "chapter1",
-                scene: [
-                    {
-                        scene_id: "chapter_1_scene_1",
-                        scene_screen_desc: "Close-up of greasy hands trying to press range hood buttons while cooking, leaving fingerprints and oil stains on the control panel",
-                        scene_screen_short_desc: "greasy hands dirty buttons",
-                        scene_subtitle: "Tired of touching greasy range hood buttons with dirty hands while cooking?",
-                        use_product_self_footage: false,
-                        video_url: "https://videos.pexels.com/video-files/33349850/14200302_1080_1920_30fps.mp4",
-                        tts_url: "bbb",
-                        thumbnail: 'https://ai-public.mastergo.com/ai/img_res/0f9722a333b0f748c9c0381417c1253a.jpg',
-                        scene_duration: '00:11'
-                    }
-                ]
-            },
-            {
-                "chapter": "Real_Life_Scenario(chapter2)",
-                "scene": [
-                    {
-                        scene_id: "chapter_Real_Life_Scenario_scene_1",
-                        scene_screen_desc: "Busy mother cooking stir-fry, smoke everywhere, trying to adjust range hood with oily hands, children coughing in background",
-                        scene_screen_short_desc: "busy mother cooking smoke",
-                        scene_subtitle: "Meet Sarah, a busy mom who struggles with her old range hood every dinner time.",
-                        use_product_self_footage: false,
-                        video_url: 'https://videos.pexels.com/video-files/33377771/14210305_1080_1918_30fps.mp4',
-                        tts_url: "ddd",
-                        thumbnail: 'https://ai-public.mastergo.com/ai/img_res/29574c973d6142d89640cb7b513bff30.jpg',
-                        scene_duration: '00:14'
-                    },
-                    {
-                        scene_id: "chapter_Real_Life_Scenario_scene_2",
-                        scene_screen_desc: "Split screen showing before: Sarah's kitchen with lingering smoke and grease stains everywhere vs after: clean, smoke-free kitchen",
-                        scene_screen_short_desc: "before after kitchen comparison",
-                        scene_subtitle: "Here's how Sarah transformed her cooking experience completely.",
-                        use_product_self_footage: false,
-                        video_url: "https://videos.pexels.com/video-files/32950328/14043633_1440_2560_60fps.mp4",
-                        tts_url: "fff",
-                        thumbnail: 'https://ai-public.mastergo.com/ai/img_res/c0fe8165eca5eadeb48b59e2b1d8b095.jpg',
-                        scene_duration: '00:14'
-                    }
-                ]
-            },
-            {
-                "chapter": "Real_Life_Scenario(chapter3)",
-                "scene": [
-                    {
-                        scene_id: "chapter_Real_Life_Scenario_scene_1",
-                        scene_screen_desc: "Busy mother cooking stir-fry, smoke everywhere, trying to adjust range hood with oily hands, children coughing in background",
-                        scene_screen_short_desc: "busy mother cooking smoke",
-                        scene_subtitle: "Meet Sarah, a busy mom who struggles with her old range hood every dinner time.",
-                        use_product_self_footage: false,
-                        video_url: "https://videos.pexels.com/video-files/32904798/14023639_1080_1920_30fps.mp4",
-                        tts_url: "ddd",
-                        thumbnail: 'https://ai-public.mastergo.com/ai/img_res/37146370ed97fb5fea1ffa298e411d37.jpg',
-                        scene_duration: '00:12'
-                    },
-                    {
-                        scene_id: "chapter_Real_Life_Scenario_scene_2",
-                        scene_screen_desc: "Split screen showing before: Sarah's kitchen with lingering smoke and grease stains everywhere vs after: clean, smoke-free kitchen",
-                        scene_screen_short_desc: "before after kitchen comparison",
-                        scene_subtitle: "Here's how Sarah transformed her cooking experience completely.",
-                        use_product_self_footage: false,
-                        video_url: "https://videos.pexels.com/video-files/33420618/14224991_1080_1920_50fps.mp4",
-                        tts_url: "fff",
-                        thumbnail: 'https://ai-public.mastergo.com/ai/img_res/c0fe8165eca5eadeb48b59e2b1d8b095.jpg',
-                        scene_duration: '00:15'
-                    }
-                ]
-            }
-        ]
-        // form.script_list = response.data; // 保存到表单
-
-        // 默认选中第一个分镜
-        if (scriptList.value.length > 0 && scriptList.value[0].scene.length > 0) {
-            selectedChapter.value = 0;
-            selectedScene.value = 0;
+// 5. 音频与视频同步
+const syncAudioToVideo = () => {
+    if (videoRef.value && audioRef.value) {
+        const videoTime = videoRef.value.currentTime;
+        const audioTime = audioRef.value.currentTime;
+        // 时间差超过0.5秒则强制同步
+        if (Math.abs(videoTime - audioTime) > 0.5) {
+            audioRef.value.currentTime = videoTime;
         }
-    } catch (error) {
-        ElMessage.error("调用接口时发生错误");
-        console.error("调用接口时发生错误:", error);
-    } finally {
-        loading.value = false;
     }
 };
 
-// 生命周期
-onMounted(() => {
-    fetchScriptData();
-});
+// 6. 播放/暂停切换（修正状态同步）
+const togglePlayPause = () => {
+    if (!videoRef.value || !audioRef.value) return;
 
-onUnmounted(() => {
-    if (videoRef.value) {
+    if (isPlaying.value) {
+        // 暂停逻辑
         videoRef.value.pause();
+        audioRef.value.pause();
+        isPlaying.value = false;
+        showControls.value = true; // 暂停时强制显示控制栏
+        clearTimeout(controlTimer.value); // 清除自动隐藏定时器
+    } else {
+        // 播放逻辑
+        Promise.all([
+            videoRef.value.play(),
+            audioRef.value.play()
+        ]).then(() => {
+            isPlaying.value = true;
+            hideControlsAfterDelay(); // 播放时自动隐藏控制栏
+        }).catch(err => {
+            ElMessage.error(`播放失败：${err.message}`);
+        });
+    }
+};
+
+// 7. 播放状态处理
+const handlePlay = () => {
+    isPlaying.value = true;
+    hideControlsAfterDelay();
+};
+
+// 8. 暂停状态处理
+const handlePause = () => {
+    isPlaying.value = false;
+    showControls.value = true;
+    // 直接使用全局的 clearTimeout
+    clearTimeout(controlTimer.value);
+};
+
+// 9. 进度条拖动跳转
+const seekTo = (time) => {
+    if (videoRef.value && audioRef.value) {
+        const validTime = Math.max(0, Math.min(time, totalDuration.value));
+        videoRef.value.currentTime = validTime;
+        audioRef.value.currentTime = validTime;
+        currentTime.value = validTime; // 同步进度条显示
+        updateSubtitleDisplay(); // 更新字幕
+    }
+};
+
+// 10. 静音切换
+const toggleMute = () => {
+    if (videoRef.value && audioRef.value) {
+        videoRef.value.muted = !isMuted.value;
+        audioRef.value.muted = !isMuted.value;
+        isMuted.value = !isMuted.value;
+    }
+};
+
+// 11. 控制栏自动隐藏
+const hideControlsAfterDelay = () => {
+    if (isPlaying.value) {
+        // 直接使用全局的 clearTimeout
+        clearTimeout(controlTimer.value);
+        controlTimer.value = setTimeout(() => {
+            showControls.value = false;
+        }, 3000);
+    }
+};
+
+// 初始化事件监听
+onMounted(() => {
+    // 监听鼠标移动显示控制栏
+    const videoContainer = document.querySelector('.video-container');
+    if (videoContainer) {
+        videoContainer.addEventListener('mousemove', () => {
+            if (isPlaying.value) {
+                showControls.value = true;
+                hideControlsAfterDelay();
+            }
+        });
     }
 });
-
-// 导航方法
-const goToPreviousStep1 = () => {
-    ElMessageBox.confirm("确定要返回上一步吗？已上传的文件将不会保存。", "提示", {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "warning",
-    }).then(() => {
-        ElMessage.success("正在返回模板匹配页面");
-        workStep.value = "template";
-    }).catch(() => {
-        // 用户取消
-    });
-};
-
-const goFinish = () => {
-    ElMessage.success("已完成");
-    // 完成逻辑
-};
 </script>
 
-<style scoped lang="scss">
-.main-content {
-    padding: 0 20px 20px 20px;
+<style lang="scss">
+.video-player-page {
+    max-width: 500px;
+    margin: 2rem auto;
+    padding: 1rem;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
 
-::v-deep(.el-main) {
-    padding-top: 0px !important;
-}
+.video-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 9/16;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
 
-.generate-step {
-    text-align: center;
-    display: grid;
-    justify-items: center;
+    .main-video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
 
-    .steps {
-        width: 80%;
-        height: 28px;
+    .hidden-audio {
+        display: none;
+    }
 
-        ::v-deep(.el-step) {
-            height: 100%;
+    // 字幕样式
+    .subtitle-overlay {
+        position: absolute;
+        bottom: 20%;
+        left: 0;
+        right: 0;
+        padding: 0 10%;
+        text-align: center;
+        pointer-events: none;
 
-            .el-step__line {
-                background-color: rgba(0, 0, 0, 0.15);
-                margin-right: 30px !important;
-                margin-left: 105px !important;
-                top: 50%;
-                height: 1px;
+        .subtitle-text {
+            color: #fff;
+            font-size: 1.2rem;
+            margin: 0;
+            line-height: 1.5;
+            text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+        }
+
+        .subtitle-word {
+            display: inline-block;
+            margin: 0 2px;
+            transition: all 0.2s ease;
+        }
+
+        .subtitle-word.active {
+            color: #ffdd00 !important;
+            transform: scale(1.1);
+            text-shadow: 0 0 8px rgba(255, 221, 0, 0.8);
+            animation: pulse 0.5s ease-in-out;
+        }
+    }
+
+    // 控制栏样式
+    .video-controls {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 1rem;
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+        transition: opacity 0.3s ease;
+        opacity: 0;
+
+        &.visible {
+            opacity: 1; // 显示控制栏
+        }
+
+        .progress-bar {
+            margin-bottom: 0.8rem;
+
+            .custom-slider {
+                width: 100%;
+
+                ::v-deep(.el-slider__runway) {
+                    height: 4px;
+                    background: rgba(255, 255, 255, 0.3);
+                }
+
+                ::v-deep(.el-slider__bar) {
+                    background: #409eff;
+                }
+
+                ::v-deep(.el-slider__button) {
+                    width: 12px;
+                    height: 12px;
+                    margin-top: -4px;
+                }
             }
+        }
 
-            .el-step__icon {
-                width: 28px;
-                height: 28px;
-                font-size: 16px;
-                border: 1px solid;
+        .control-buttons {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
 
-                .el-step__icon-inner {
-                    font-weight: unset !important;
+            .play-button,
+            .volume-button {
+                width: 36px;
+                height: 36px;
+                background: rgba(255, 255, 255, 0.2);
+                border: none;
+                color: #fff;
+
+                &:hover {
+                    background: rgba(255, 255, 255, 0.3);
+                    color: #fff;
                 }
             }
 
-            .el-step__head.is-process {
-                color: #2563eb;
-                border-color: #2563eb;
-            }
-
-            .el-step__head.is-success {
-                color: #2563eb;
-                border-color: #2563eb;
-            }
-
-            .is-process .el-step__icon.is-text {
-                background: #2563eb;
+            .time-display {
                 color: #fff;
-            }
-
-            .el-step__title.is-process {
-                color: #2563eb;
-            }
-
-            .el-step__title.is-success {
-                color: #565656;
-            }
-
-            .el-step__title {
-                position: absolute;
-                top: calc((100% - 28px)/2);
-                left: calc(50% + 25px);
-                line-height: 28px;
+                font-size: 0.85rem;
             }
         }
     }
 }
 
-.work-content {
-    display: flex;
-    flex-direction: row;
-    gap: 20px;
-    margin-top: 20px;
+.video-info {
+    padding: 1rem 0 0.5rem;
 
-    .storyboard-form {
-        width: 35%;
-        padding: 2rem;
-        border-radius: 8px;
-        background-color: #fff;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-        height: calc(100vh - 120px);
-        overflow-y: auto;
-
-        .scene-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 1rem;
-        }
-
-        .section-title {
-            font-size: 1.125rem;
-            font-weight: 500;
-        }
-
-        .add-scene-button {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.875rem;
-        }
-
-        .scene-list {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .chapter-timeline {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            padding-left: 10px;
-            border-left: 2px solid #e5e7eb;
-            margin-left: 10px;
-        }
-
-        .chapter-name {
-            font-size: 1rem;
-            font-weight: 600;
-            color: #2563eb;
-            margin-left: 0.5rem;
-            padding-top: 5px;
-        }
-
-        .scene-item-wrapper {
-            position: relative;
-            cursor: pointer;
-        }
-
-        .scene-item {
-            transition: all 0.3s ease;
-            cursor: pointer;
-            overflow: visible;
-
-            &.is-selected {
-                background-color: #EEF4FF;
-                border: 1px solid #246BFD;
-            }
-
-            &:hover {
-                background-color: #f3f4f6;
-            }
-
-            :deep(.el-card__body) {
-                padding: 1.5rem;
-            }
-        }
-
-        .scene-content {
-            display: flex;
-            gap: 1rem;
-        }
-
-        .scene-thumbnail {
-            position: relative;
-            width: 6rem;
-            height: 6rem;
-            border-radius: 0.375rem;
-            overflow: hidden;
-            flex-shrink: 0;
-        }
-
-        .thumbnail-image {
-            width: 100%;
-            height: 100%;
-        }
-
-        .replace-button {
-            position: absolute;
-            top: 0.5rem;
-            left: 0.5rem;
-            font-size: 0.75rem;
-            padding: 0.25rem 0.5rem;
-            background-color: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(4px);
-        }
-
-        .scene-details {
-            flex: 1;
-            min-height: 7.5rem;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .scene-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 0.5rem;
-        }
-
-        .scene-title {
-            font-size: 1.125rem;
-            font-weight: 500;
-        }
-
-        .scene-duration {
-            font-size: 0.875rem;
-            color: #6b7280;
-        }
-
-        .scene-description {
-            flex: 1;
-
-            :deep(.el-textarea__inner) {
-                height: 100%;
-                font-size: 1rem;
-                resize: none;
-            }
-        }
+    .video-title {
+        margin: 0 0 0.5rem;
+        color: #333;
+        font-size: 1.3rem;
+        font-weight: 600;
     }
 
-    .storyboard-res {
-        flex: 1;
-        padding: 2rem;
-        border-radius: 8px;
-        background-color: #fff;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-        display: flex;
-        flex-direction: column;
+    .video-desc {
+        margin: 0;
+        color: #666;
+        font-size: 0.9rem;
+    }
+}
 
-        .preview-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 1rem;
-        }
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
 
-        .preview-tabs {
-            display: flex;
-            gap: 1rem;
-        }
+    50% {
+        transform: scale(1.15);
+    }
 
-        .preview-quality {
-            font-size: 0.875rem;
-            color: #6b7280;
-        }
-
-        .video-preview-container {
-            position: relative;
-            width: 400px;
-            height: 600px;
-            margin: 0 auto 1rem;
-            border-radius: 0.5rem;
-            overflow: hidden;
-            background-color: #000;
-        }
-
-        .video-preview {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .video-placeholder {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: #666;
-        }
-
-        .placeholder-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            color: #999;
-        }
-
-        .video-subtitle-overlay {
-            position: absolute;
-            bottom: 50px;
-            left: 0;
-            right: 0;
-            padding: 0 20px;
-            text-align: center;
-            color: white;
-            font-size: 1rem;
-            text-shadow: 0 0 3px rgba(0, 0, 0, 0.7);
-        }
-
-        .video-controls {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 1rem;
-        }
-
-        .playback-controls,
-        .feedback-controls {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .time-display {
-            font-size: 0.875rem;
-            color: #6b7280;
-        }
-
-        .control-button {
-            color: #4b5563;
-        }
-
-        .progress-container {
-            width: 100%;
-            margin-bottom: 1rem;
-        }
-
-        .video-progress {
-            width: 100%;
-        }
-
-        .action-buttons {
-            display: flex;
-            justify-content: space-between;
-            margin-top: auto;
-            padding-top: 1rem;
-        }
+    100% {
+        transform: scale(1.1);
     }
 }
 </style>

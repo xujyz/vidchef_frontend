@@ -31,7 +31,7 @@ const routes = [
       {
         path: 'space',
         name: 'Space',
-        component: () => import('../views/Create/Space.vue'),
+        component: () => import('../views/Create/Test.vue'),
         meta: { roles: ['user'], title: '我的空间' },
       },
       {
