@@ -39,15 +39,25 @@ const scriptList = ref([]);
 const selectedChapter = ref(-1);
 const selectedScene = ref(-1);
 const videoRef = ref(null);
-const videoThumbnailRefs = ref({});
+const audioRef = ref(null);
 const defaultThumbnail = ref('https://ai-public.mastergo.com/ai/img_res/default-thumbnail.jpg');
 const currentTime = ref(0);
 const videoDuration = ref(0);
 const activeTab = ref('scene');
 const isAutoPlaying = ref(false);
 
+// 音频资源列表
+const audioUrls = [
+    "https://er-sycdn.kuwo.cn/424a38b85af293a5e95b77806fa470a5/68a8959a/resource/30106/trackmedia/M800003aAYrm3GE0Ac.mp3",
+    "https://lv-sycdn.kuwo.cn/acedaa6e82729d1f9fe63a9bb17a23c0/68a895b6/resource/30106/trackmedia/M800001tr7t43Ry7GG.mp3",
+    "https://er-sycdn.kuwo.cn/793134577607842d606aeef3dae22da0/68a895d0/resource/30106/trackmedia/M800001ixp014Kmo7p.mp3",
+    "https://lv-sycdn.kuwo.cn/4bce284fc098b33d2931c810bbf77fd6/68a895ea/resource/30106/trackmedia/M800004O1DHG4MjYOi.mp3",
+    "https://lw-sycdn.kuwo.cn/6c213d0711cc74f7efd6c1747ddc2452/68a895fd/resource/30106/trackmedia/M800000BvHDl2Xz6GF.mp3"
+];
+
 // 视频替换相关状态
 const videoReplaceDialogVisible = ref(false);
+const syncLock = ref(false); // 用于防止同步时的循环触发
 const replacementVideos = ref([
     {
         url: 'https://videos.pexels.com/video-files/33498322/14248462_1440_2560_30fps.mp4',
@@ -402,7 +412,9 @@ const generateVideo = async () => {
 
         // 存储接口返回的数据
         scriptDemo.value = response.data.data;
-        scriptList.value = [
+
+        let audioIndex = 0
+        const scenes = [
             {
                 chapter: "chapter1",
                 scene: [
@@ -413,7 +425,7 @@ const generateVideo = async () => {
                         scene_subtitle: "Tired of touching greasy range hood buttons with dirty hands while cooking?",
                         use_product_self_footage: false,
                         video_url: "https://videos.pexels.com/video-files/33349850/14200302_1080_1920_30fps.mp4",
-                        tts_url: "bbb",
+                        tts_url: audioUrls[audioIndex++ % audioUrls.length],
 
                     }
                 ]
@@ -428,7 +440,7 @@ const generateVideo = async () => {
                         scene_subtitle: "Meet Sarah, a busy mom who struggles with her old range hood every dinner time.",
                         use_product_self_footage: false,
                         video_url: 'https://videos.pexels.com/video-files/33377771/14210305_1080_1918_30fps.mp4',
-                        tts_url: "ddd",
+                        tts_url: audioUrls[audioIndex++ % audioUrls.length],
 
                     },
                     {
@@ -438,7 +450,7 @@ const generateVideo = async () => {
                         scene_subtitle: "Here's how Sarah transformed her cooking experience completely.",
                         use_product_self_footage: false,
                         video_url: "https://videos.pexels.com/video-files/32950328/14043633_1440_2560_60fps.mp4",
-                        tts_url: "fff",
+                        tts_url: audioUrls[audioIndex++ % audioUrls.length],
 
                     }
                 ]
@@ -453,7 +465,7 @@ const generateVideo = async () => {
                         scene_subtitle: "Meet Sarah, a busy mom who struggles with her old range hood every dinner time.",
                         use_product_self_footage: false,
                         video_url: "https://videos.pexels.com/video-files/32904798/14023639_1080_1920_30fps.mp4",
-                        tts_url: "ddd",
+                        tts_url: audioUrls[audioIndex++ % audioUrls.length],
                     },
                     {
                         scene_id: "chapter_Real_Life_Scenario_scene_2",
@@ -462,34 +474,61 @@ const generateVideo = async () => {
                         scene_subtitle: "Here's how Sarah transformed her cooking experience completely.",
                         use_product_self_footage: false,
                         video_url: "https://videos.pexels.com/video-files/33420618/14224991_1080_1920_50fps.mp4",
-                        tts_url: "fff",
+                        tts_url: audioUrls[audioIndex++ % audioUrls.length],
                     }
                 ]
             }
         ]
 
+        scriptList.value = scenes.map(chapter => ({
+            ...chapter,
+            scene: chapter.scene.map(scene => ({
+                ...scene,
+                isEditing: false,
+                isAudioGenerating: false,
+                audioDuration: 0,
+                duration: '00:00',
+                thumbnail: null
+            }))
+        }));
+
         form.script_list = scriptList.value
         console.log(form)
         console.log("scriptlist", scriptList.value)
+        debugger
         // 更新状态
         workStep.value = 'storyboard';
         active.value = 2;
 
-        // 初始化所有场景的编辑状态
-        scriptList.value.forEach(chapter => {
-            chapter.scene.forEach(scene => {
-                scene.isEditing = false;
-                scene.isAudioGenerating = false;
+        // 为每个场景生成缩略图和获取时长
+        scenes.forEach((chapter, chapterIndex) => {
+            chapter.scene.forEach((scene, sceneIndex) => {
+                // 生成缩略图
+                generateThumbnail(scene.video_url).then(thumbnail => {
+                    scriptList.value[chapterIndex].scene[sceneIndex].thumbnail = thumbnail;
+                });
+
+                // 获取视频时长
+                getVideoDuration(scene.video_url).then(duration => {
+                    scriptList.value[chapterIndex].scene[sceneIndex].duration = formatTime(duration);
+                });
+
+                // 获取音频时长
+                getAudioDuration(scene.tts_url).then(duration => {
+                    scriptList.value[chapterIndex].scene[sceneIndex].audioDuration = duration;
+                });
             });
         });
 
         // 自动播放第一个场景
         if (scriptList.value.length > 0 && scriptList.value[0].scene.length > 0) {
             nextTick(() => {
-                selectedChapter.value = 0;
-                selectedScene.value = 0;
-                isAutoPlaying.value = true;
-                playCurrentVideo();
+                if (scriptList.value.length > 0 && scriptList.value[0].scene.length > 0) {
+                    selectedChapter.value = 0;
+                    selectedScene.value = 0;
+                    isAutoPlaying.value = true; // 开启自动连播
+                    playCurrentVideo(); // 启动首帧播放
+                }
             });
         }
 
@@ -506,35 +545,89 @@ const generateVideo = async () => {
     }
 };
 
-// 生成视频缩略图并获取时长
-const generateThumbnail = (chapterIndex, sceneIndex) => {
-    const scene = scriptList.value[chapterIndex].scene[sceneIndex];
-    const video = videoThumbnailRefs.value[chapterIndex + '-' + sceneIndex];
+// 生成视频缩略图（不加载DOM中的video元素）
+const generateThumbnail = (videoUrl) => {
+    return new Promise((resolve) => {
+        // 创建一个不在DOM中的视频元素
+        const video = document.createElement('video');
+        video.crossOrigin = 'anonymous';
+        video.src = videoUrl;
+        video.preload = 'metadata';
 
-    if (!video) return;
+        // 视频元数据加载完成后
+        video.onloadedmetadata = () => {
+            // 跳到第一帧
+            video.currentTime = 0.1; // 稍微过一点0秒，确保有画面
 
-    // 获取视频时长
-    video.onloadedmetadata = () => {
-        const duration = video.duration;
-        scene.duration = formatTime(duration);
-    };
+            video.onseeked = () => {
+                // 创建canvas绘制第一帧
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth || 320;
+                canvas.height = video.videoHeight || 240;
 
-    // 捕获第一帧作为缩略图
-    video.currentTime = 1; // 跳到1秒处捕获帧
-    video.onseeked = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        scene.thumbnail = canvas.toDataURL('image/jpeg');
-    };
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // 转换为图片URL
+                const thumbnail = canvas.toDataURL('image/jpeg');
+                resolve(thumbnail);
+
+                // 清理资源
+                video.remove();
+            };
+
+            video.onerror = () => {
+                resolve(defaultThumbnail.value);
+                video.remove();
+            };
+        };
+
+        video.onerror = () => {
+            resolve(defaultThumbnail.value);
+            video.remove();
+        };
+    });
+};
+
+// 获取视频时长
+const getVideoDuration = (videoUrl) => {
+    return new Promise((resolve) => {
+        const video = document.createElement('video');
+        video.crossOrigin = 'anonymous';
+        video.src = videoUrl;
+        video.preload = 'metadata';
+
+        video.onloadedmetadata = () => {
+            const duration = video.duration || 0;
+            resolve(duration);
+            video.remove();
+        };
+
+        video.onerror = () => {
+            resolve(0);
+            video.remove();
+        };
+    });
+};
+
+// 获取音频时长
+const getAudioDuration = (audioUrl) => {
+    return new Promise((resolve) => {
+        const audio = new Audio(audioUrl);
+        audio.onloadedmetadata = () => {
+            resolve(audio.duration);
+        };
+        audio.onerror = () => {
+            resolve(0);
+        };
+    });
 };
 
 // 选择并播放场景
 const selectAndPlayScene = (chapterIndex, sceneIndex) => {
-    // 如果正在生成音频，不允许切换场景
-    if (scriptList.value[chapterIndex].scene[sceneIndex].isAudioGenerating) {
+    const scene = scriptList.value[chapterIndex].scene[sceneIndex];
+    // 正在生成音频或编辑中，不允许切换
+    if (scene.isAudioGenerating || scene.isEditing) {
         return;
     }
 
@@ -545,21 +638,172 @@ const selectAndPlayScene = (chapterIndex, sceneIndex) => {
 };
 
 // 播放当前视频
-const playCurrentVideo = () => {
-    nextTick(() => {
-        if (videoRef.value && currentScene.value && !currentScene.value.isAudioGenerating) {
-            videoRef.value.load();
-            videoRef.value.play().catch((err) => {
+const playCurrentVideo = async () => {
+    // 先暂停当前媒体
+    if (videoRef.value) videoRef.value.pause();
+    if (audioRef.value) audioRef.value.pause();
+
+    nextTick(async () => {
+        if (videoRef.value && audioRef.value && currentScene.value && !currentScene.value.isAudioGenerating && !currentScene.value.isEditing) {
+            try {
+                // 加载视频
+                videoRef.value.src = currentScene.value.video_url;
+                await videoRef.value.load();
+
+                // 加载音频
+                audioRef.value.src = currentScene.value.tts_url;
+                await audioRef.value.load();
+
+                // 播放视频和音频
+                await Promise.all([
+                    videoRef.value.play(),
+                    audioRef.value.play()
+                ]);
+
+                // 确保两者时间同步
+                syncMediaTime();
+
+                // 处理视频时长小于音频时长的情况
+                // handleVideoAudioDurationMatch();
+            } catch (err) {
                 console.error("自动播放失败:", err);
                 ElMessage.warning('浏览器阻止了自动播放，请手动点击播放');
-            });
+            }
         }
     });
 };
 
+// 同步播放媒体（视频+音频）
+const playSyncMedia = async () => {
+    if (videoRef.value && audioRef.value && currentScene.value && !currentScene.value.isAudioGenerating && !currentScene.value.isEditing) {
+        try {
+            if (videoRef.value.paused || audioRef.value.paused) {
+                // 确保两者状态一致
+                if (videoRef.value.paused !== audioRef.value.paused) {
+                    syncMediaState();
+                }
+
+                await Promise.all([
+                    videoRef.value.play(),
+                    audioRef.value.play()
+                ]);
+
+                // 同步时间
+                syncMediaTime();
+                // handleVideoAudioDurationMatch();
+            }
+        } catch (err) {
+            console.error("播放失败:", err);
+            ElMessage.warning('播放失败，请重试');
+        }
+    }
+};
+
+// 同步暂停媒体（视频+音频）
+const pauseSyncMedia = () => {
+    if (videoRef.value && audioRef.value) {
+        if (!videoRef.value.paused) videoRef.value.pause();
+        if (!audioRef.value.paused) audioRef.value.pause();
+    }
+};
+
+// 同步媒体时间
+const syncMediaTime = () => {
+    if (!videoRef.value || !audioRef.value) return;
+
+    // 以视频时间为准同步音频
+    const targetTime = videoRef.value.currentTime;
+    if (Math.abs(audioRef.value.currentTime - targetTime) > 0.1) {
+        syncLock.value = true;
+        audioRef.value.currentTime = targetTime;
+        currentTime.value = targetTime;
+        setTimeout(() => syncLock.value = false, 100);
+    }
+};
+
+// 同步媒体状态
+const syncMediaState = () => {
+    if (!videoRef.value || !audioRef.value) return;
+
+    // 如果一个在播放，一个在暂停，统一状态为暂停
+    if (videoRef.value.paused !== audioRef.value.paused) {
+        videoRef.value.pause();
+        audioRef.value.pause();
+    }
+};
+
+// 处理媒体暂停事件
+const handleMediaPause = () => {
+    if (!syncLock.value && videoRef.value && audioRef.value) {
+        // 如果一个暂停，另一个也暂停
+        if (videoRef.value.paused && !audioRef.value.paused) {
+            syncLock.value = true;
+            audioRef.value.pause();
+            setTimeout(() => syncLock.value = false, 100);
+        } else if (!videoRef.value.paused && audioRef.value.paused) {
+            syncLock.value = true;
+            videoRef.value.pause();
+            setTimeout(() => syncLock.value = false, 100);
+        }
+    }
+};
+
+// 处理媒体播放事件
+const handleMediaPlay = () => {
+    if (!syncLock.value && videoRef.value && audioRef.value) {
+        // 如果一个播放，另一个也播放并同步时间
+        if (!videoRef.value.paused && audioRef.value.paused) {
+            syncLock.value = true;
+            audioRef.value.currentTime = videoRef.value.currentTime;
+            audioRef.value.play().catch(() => {
+                videoRef.value.pause();
+                syncLock.value = false;
+            });
+            setTimeout(() => syncLock.value = false, 100);
+        } else if (videoRef.value.paused && !audioRef.value.paused) {
+            syncLock.value = true;
+            videoRef.value.currentTime = audioRef.value.currentTime;
+            videoRef.value.play().catch(() => {
+                audioRef.value.pause();
+                syncLock.value = false;
+            });
+            setTimeout(() => syncLock.value = false, 100);
+        }
+    }
+};
+
+// 处理视频与音频时长匹配
+// const handleVideoAudioDurationMatch = () => {
+//     if (!videoRef.value || !audioRef.value || !currentScene.value) return;
+
+//     const videoDur = videoRef.value.duration;
+//     const audioDur = audioRef.value.duration;
+
+//     // 视频时长小于音频时长：视频结束后保持最后一帧
+//     if (videoDur < audioDur) {
+//         videoRef.value.addEventListener('ended', () => {
+//             videoRef.value.pause();
+//             // 保持最后一帧
+//             videoRef.value.currentTime = videoDur;
+//         }, { once: true });
+//     }
+//     // 音频时长小于视频时长：音频结束后暂停视频
+//     else if (audioDur < videoDur) {
+//         audioRef.value.addEventListener('ended', () => {
+//             videoRef.value.pause();
+//             videoRef.value.currentTime = audioDur;
+//         }, { once: true });
+//     }
+// };
+
 // 处理视频播放结束
 const handleVideoEnded = () => {
-    if (!isAutoPlaying.value || !currentScene.value || currentScene.value.isAudioGenerating) return;
+    if (!isAutoPlaying.value || !currentScene.value || currentScene.value.isAudioGenerating || currentScene.value.isEditing) return;
+
+    // // 音频未结束时不切换场景
+    // if (audioRef.value && !audioRef.value.ended) return;
+    // 停止当前音频（避免音频继续播放）
+    if (audioRef.value) audioRef.value.pause();
 
     // 查找下一个场景
     let nextChapter = selectedChapter.value;
@@ -568,44 +812,75 @@ const handleVideoEnded = () => {
     // 检查当前章节是否有下一个场景
     if (nextScene < scriptList.value[nextChapter].scene.length) {
         selectedScene.value = nextScene;
-        playCurrentVideo();
+        // 等待DOM更新后再播放，确保视频元素已绑定新URL
+        nextTick(() => playCurrentVideo());
     } else {
-        // 检查是否有下一个章节
         nextChapter++;
         if (nextChapter < scriptList.value.length && scriptList.value[nextChapter].scene.length > 0) {
             selectedChapter.value = nextChapter;
             selectedScene.value = 0;
-            playCurrentVideo();
+            nextTick(() => playCurrentVideo());
         } else {
-            // 所有视频播放完毕，回到第一个场景
+            // 回到第一个场景
             selectedChapter.value = 0;
             selectedScene.value = 0;
             isAutoPlaying.value = false;
-            // 重置视频
-            nextTick(() => {
-                if (videoRef.value) {
-                    videoRef.value.currentTime = 0;
-                    videoRef.value.pause();
-                }
-            });
+            resetMedia();
         }
     }
+};
+
+// 处理音频播放结束
+const handleAudioEnded = () => {
+    // if (videoRef.value && !videoRef.value.ended) {
+    //     videoRef.value.pause();
+    //     videoRef.value.currentTime = audioRef.value.duration;
+    // }
+    // if (audioRef.value) {
+    //     audioRef.value.pause();
+    // }
+
+    // if (isAutoPlaying.value) {
+    //     handleVideoEnded();
+    // }
+    // 音频结束时仅暂停，不触发场景切换（避免音频先结束导致跳帧）
+    if (audioRef.value) {
+        audioRef.value.pause();
+        audioRef.value.currentTime = 0;
+    }
+};
+
+// 重置媒体状态
+const resetMedia = () => {
+    if (videoRef.value) {
+        videoRef.value.currentTime = 0;
+        videoRef.value.pause();
+    }
+    if (audioRef.value) {
+        audioRef.value.currentTime = 0;
+        audioRef.value.pause();
+    }
+    currentTime.value = 0;
 };
 
 // 切换场景编辑状态
 const toggleEditScene = (chapterIndex, sceneIndex) => {
     const scene = scriptList.value[chapterIndex].scene[sceneIndex];
 
-    // 如果正在生成音频，不允许编辑
+    // 正在生成音频，不允许编辑
     if (scene.isAudioGenerating) {
+        ElMessage.warning('正在生成音频，暂时无法编辑');
         return;
     }
 
-    // 如果正在编辑，点击则取消编辑
+    // 取消编辑
     if (scene.isEditing) {
         scene.isEditing = false;
         return;
     }
+
+    // 暂停当前媒体
+    resetMedia();
 
     // 关闭其他场景的编辑状态
     scriptList.value.forEach(chap => {
@@ -614,7 +889,7 @@ const toggleEditScene = (chapterIndex, sceneIndex) => {
         });
     });
 
-    // 开启当前场景的编辑状态
+    // 开启当前场景编辑
     scene.isEditing = true;
 };
 
@@ -624,6 +899,8 @@ const confirmEditScene = (chapterIndex, sceneIndex) => {
 
     // 标记为正在生成音频
     scene.isAudioGenerating = true;
+    // 暂停媒体
+    resetMedia();
 
     ElMessageBox.confirm(
         '确定要保存修改吗？系统将重新生成音频。',
@@ -638,7 +915,7 @@ const confirmEditScene = (chapterIndex, sceneIndex) => {
         regenerateAudio(chapterIndex, sceneIndex);
         scene.isEditing = false;
     }).catch(() => {
-        // 取消修改，恢复编辑状态和音频生成状态
+        // 取消修改
         scene.isEditing = false;
         scene.isAudioGenerating = false;
     });
@@ -649,19 +926,27 @@ const regenerateAudio = async (chapterIndex, sceneIndex) => {
     const scene = scriptList.value[chapterIndex].scene[sceneIndex];
 
     try {
-        // 模拟API调用
+        // 模拟API调用延迟
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // 实际项目中这里会调用后端接口获取新的音频URL
-        const newTtsUrl = `new_${scene.tts_url}`;
-        scene.tts_url = newTtsUrl;
+        // 1. 替换音频资源
+        const newAudioUrl = audioUrls[Math.floor(Math.random() * audioUrls.length)];
+        scene.tts_url = newAudioUrl;
 
-        ElMessage.success('音频已更新');
+        // 2. 获取新音频时长
+        const newAudioDur = await getAudioDuration(newAudioUrl);
+        scene.audioDuration = newAudioDur;
+
+        ElMessage.success('音频已更新，视频时长已同步');
+
+        // 3. 如果是当前选中场景，重新播放
+        if (selectedChapter.value === chapterIndex && selectedScene.value === sceneIndex) {
+            playCurrentVideo();
+        }
     } catch (error) {
         console.error('生成音频失败:', error);
         ElMessage.error('生成音频失败，请重试');
     } finally {
-        // 无论成功失败，都结束加载状态
         scene.isAudioGenerating = false;
     }
 };
@@ -670,9 +955,9 @@ const regenerateAudio = async (chapterIndex, sceneIndex) => {
 const confirmDeleteScene = (chapterIndex, sceneIndex) => {
     const scene = scriptList.value[chapterIndex].scene[sceneIndex];
 
-    // 如果正在生成音频，不允许删除
-    if (scene.isAudioGenerating) {
-        ElMessage.warning('正在生成音频，暂时不能删除');
+    // 正在生成音频或编辑中，不允许删除
+    if (scene.isAudioGenerating || scene.isEditing) {
+        ElMessage.warning('当前场景正在处理中，暂时不能删除');
         return;
     }
 
@@ -686,43 +971,55 @@ const confirmDeleteScene = (chapterIndex, sceneIndex) => {
         }
     ).then(() => {
         deleteScene(chapterIndex, sceneIndex);
-    }).catch(() => {
-        // 取消删除
     });
 };
 
 // 删除场景
 const deleteScene = (chapterIndex, sceneIndex) => {
-    // 移除场景
-    scriptList.value[chapterIndex].scene.splice(sceneIndex, 1);
+    const chapter = scriptList.value[chapterIndex];
+    const isCurrentScene = selectedChapter.value === chapterIndex && selectedScene.value === sceneIndex;
 
-    // 如果删除的是当前选中的场景
-    if (selectedChapter.value === chapterIndex && selectedScene.value === sceneIndex) {
-        // 如果当前章节还有其他场景
-        if (scriptList.value[chapterIndex].scene.length > 0) {
-            // 选中当前章节的第一个场景
-            selectedScene.value = 0;
-            playCurrentVideo();
-        } else {
-            // 当前章节已空，尝试选中前一个章节
-            if (chapterIndex > 0) {
-                selectedChapter.value = chapterIndex - 1;
-                selectedScene.value = scriptList.value[chapterIndex - 1].scene.length - 1;
-                playCurrentVideo();
-            } else if (scriptList.value.length > 1) {
-                // 选中下一个章节
-                selectedChapter.value = 1;
+    // 移除场景
+    chapter.scene.splice(sceneIndex, 1);
+
+    // 如果章节下没有场景了，删除整个章节
+    if (chapter.scene.length === 0) {
+        scriptList.value.splice(chapterIndex, 1);
+
+        // 处理选中状态
+        if (isCurrentScene || selectedChapter.value === chapterIndex) {
+            if (scriptList.value.length > 0) {
+                // 选择第一个章节的第一个场景
+                selectedChapter.value = 0;
                 selectedScene.value = 0;
                 playCurrentVideo();
             } else {
-                // 没有场景了
+                // 没有章节了
                 selectedChapter.value = -1;
                 selectedScene.value = -1;
+                resetMedia();
             }
+        } else if (selectedChapter.value > chapterIndex) {
+            // 如果选中的章节在被删除章节之后，索引减1
+            selectedChapter.value--;
         }
-    } else if (selectedChapter.value === chapterIndex && selectedScene.value > sceneIndex) {
-        // 如果删除的是当前选中场景之前的场景，调整索引
-        selectedScene.value--;
+    } else {
+        // 章节还有其他场景
+        if (isCurrentScene) {
+            // 如果删除的是当前选中的场景
+            if (sceneIndex < chapter.scene.length) {
+                // 选择同章节的下一个场景
+                selectedScene.value = sceneIndex;
+                playCurrentVideo();
+            } else {
+                // 选择同章节的最后一个场景
+                selectedScene.value = chapter.scene.length - 1;
+                playCurrentVideo();
+            }
+        } else if (selectedChapter.value === chapterIndex && selectedScene.value > sceneIndex) {
+            // 如果选中的场景在被删除场景之后，索引减1
+            selectedScene.value--;
+        }
     }
 
     ElMessage.success('场景已删除');
@@ -747,14 +1044,24 @@ const handleVideoLoaded = () => {
 };
 
 const handleTimeUpdate = () => {
-    if (videoRef.value) {
+    if (!syncLock.value && videoRef.value) {
         currentTime.value = videoRef.value.currentTime;
+        // 同步音频进度（如果差异较大）
+        if (audioRef.value && Math.abs(audioRef.value.currentTime - videoRef.value.currentTime) > 0.2) {
+            syncLock.value = true;
+            audioRef.value.currentTime = videoRef.value.currentTime;
+            setTimeout(() => syncLock.value = false, 100);
+        }
     }
 };
 
 const handleTimeChange = (time) => {
-    if (videoRef.value && !currentScene.value?.isAudioGenerating) {
+    if (videoRef.value && audioRef.value && currentScene.value && !currentScene.value.isAudioGenerating && !currentScene.value.isEditing) {
+        syncLock.value = true;
         videoRef.value.currentTime = time;
+        audioRef.value.currentTime = time;
+        currentTime.value = time;
+        setTimeout(() => syncLock.value = false, 100);
     }
 };
 
@@ -766,6 +1073,7 @@ const goToPreviousStep1 = () => {
     }).then(() => {
         ElMessage.success('正在返回模板匹配页面');
         workStep.value = 'template';
+        resetMedia();
     }).catch(() => {
         // 取消操作
     });
@@ -775,6 +1083,7 @@ const goFinish = () => {
     ElMessage.success('已完成');
     workStep.value = 'persona';
     active.value = 3;
+    resetMedia();
 };
 
 // 打开视频替换弹窗
@@ -848,35 +1157,58 @@ const selectReplacementVideo = (video) => {
 
 // 确认替换视频
 const confirmReplaceVideo = () => {
+    // if (!selectedReplacementVideo.value) {
+    //     ElMessage.warning('请选择要替换的视频');
+    //     return;
+    // }
+
+    // if (currentReplaceChapterIndex.value === -1 || currentReplaceSceneIndex.value === -1) {
+    //     return;
+    // }
+
+    // // 更新视频URL
+    // const scene = scriptList.value[currentReplaceChapterIndex.value].scene[currentReplaceSceneIndex.value];
+    // scene.video_url = selectedReplacementVideo.value.url;
+    // scene.thumbnail = null; // 清除旧缩略图
+
+    // // 重新生成缩略图
+    // nextTick(() => {
+    //     const video = videoThumbnailRefs.value[currentReplaceChapterIndex.value + '-' + currentReplaceSceneIndex.value];
+    //     if (video) {
+    //         video.load();
+    //         generateThumbnail(currentReplaceChapterIndex.value, currentReplaceSceneIndex.value);
+    //     }
+    // });
+
+    // // 如果替换的是当前正在播放的视频，重新加载播放
+    // if (selectedChapter.value === currentReplaceChapterIndex.value &&
+    //     selectedScene.value === currentReplaceSceneIndex.value) {
+    //     playCurrentVideo();
+    // }
+
+    // videoReplaceDialogVisible.value = false;
+    // ElMessage.success('视频已替换');
     if (!selectedReplacementVideo.value) {
         ElMessage.warning('请选择要替换的视频');
         return;
     }
-
-    if (currentReplaceChapterIndex.value === -1 || currentReplaceSceneIndex.value === -1) {
-        return;
-    }
-
-    // 更新视频URL
     const scene = scriptList.value[currentReplaceChapterIndex.value].scene[currentReplaceSceneIndex.value];
     scene.video_url = selectedReplacementVideo.value.url;
-    scene.thumbnail = null; // 清除旧缩略图
+    scene.thumbnail = null;
 
-    // 重新生成缩略图
-    nextTick(() => {
-        const video = videoThumbnailRefs.value[currentReplaceChapterIndex.value + '-' + currentReplaceSceneIndex.value];
-        if (video) {
-            video.load();
-            generateThumbnail(currentReplaceChapterIndex.value, currentReplaceSceneIndex.value);
-        }
+    // 原代码传了索引，改为传视频URL（符合generateThumbnail函数定义）
+    generateThumbnail(selectedReplacementVideo.value.url).then(thumbnail => {
+        scene.thumbnail = thumbnail;
     });
 
-    // 如果替换的是当前正在播放的视频，重新加载播放
-    if (selectedChapter.value === currentReplaceChapterIndex.value &&
-        selectedScene.value === currentReplaceSceneIndex.value) {
+    // 重新获取新视频时长
+    getVideoDuration(selectedReplacementVideo.value.url).then(duration => {
+        scene.duration = formatTime(duration);
+    });
+
+    if (selectedChapter.value === currentReplaceChapterIndex.value && selectedScene.value === currentReplaceSceneIndex.value) {
         playCurrentVideo();
     }
-
     videoReplaceDialogVisible.value = false;
     ElMessage.success('视频已替换');
 };
@@ -1147,7 +1479,7 @@ const confirmReplaceVideo = () => {
                                 :class="{ 'is-disabled': scene.isAudioGenerating }">
                                 <el-card class="scene-item" :class="{
                                     'is-selected': selectedChapter === chapterIndex && selectedScene === sceneIndex,
-                                    'is-loading': scene.isAudioGenerating
+                                    'is-loading': scene.isAudioGenerating, 'is-editing': scene.isEditing
                                 }" shadow="hover">
                                     <!-- 加载状态遮罩 -->
                                     <div class="loading-mask" v-if="scene.isAudioGenerating">
@@ -1158,21 +1490,21 @@ const confirmReplaceVideo = () => {
                                     <div class="scene-content">
                                         <div class="scene-thumbnail">
                                             <el-image :src="scene.thumbnail || defaultThumbnail" fit="cover"
-                                                class="thumbnail-image" v-if="scene.thumbnail" />
-                                            <video ref="videoThumbnailRefs[chapterIndex + '-' + sceneIndex]"
-                                                :src="scene.video_url" class="thumbnail-video"
-                                                @loadeddata="generateThumbnail(chapterIndex, sceneIndex)"
-                                                style="display: none;" />
+                                                class="thumbnail-image" lazy />
                                             <el-button class="replace-button" size="small"
                                                 @click.stop="openVideoReplaceDialog(chapterIndex, sceneIndex)"
-                                                :disabled="scene.isAudioGenerating">
+                                                :disabled="scene.isAudioGenerating || scene.isEditing">
                                                 替换
                                             </el-button>
                                         </div>
                                         <div class="scene-details">
                                             <div class="scene-header">
                                                 <div class="scene-title">{{ scene.scene_subtitle }}</div>
-                                                <div class="scene-duration">{{ scene.duration || '00:00' }}</div>
+                                                <div class="scene-duration">
+                                                    视频: {{ scene.duration || '00:00' }} / 音频: {{
+                                                        formatTime(scene.audioDuration
+                                                            || 0) }}
+                                                </div>
                                             </div>
                                             <div class="scene-description-container">
                                                 <el-input v-model="scene.scene_screen_desc" type="textarea" :rows="2"
@@ -1202,7 +1534,7 @@ const confirmReplaceVideo = () => {
                                     </el-button>
                                     <el-button circle class="action-button"
                                         @click.stop="confirmDeleteScene(chapterIndex, sceneIndex)"
-                                        :disabled="scene.isAudioGenerating">
+                                        :disabled="scene.isAudioGenerating || scene.isEditing">
                                         <el-icon>
                                             <Delete />
                                         </el-icon>
@@ -1227,41 +1559,57 @@ const confirmReplaceVideo = () => {
                     <div class="video-preview-container">
                         <video ref="videoRef" :src="currentScene?.video_url" controls class="video-preview"
                             @loadeddata="handleVideoLoaded" @timeupdate="handleTimeUpdate" @ended="handleVideoEnded"
-                            :disabled="currentScene?.isAudioGenerating"
-                            :class="{ 'video-disabled': currentScene?.isAudioGenerating }">
+                            @pause="handleMediaPause" @play="handleMediaPlay"
+                            :disabled="currentScene?.isAudioGenerating || currentScene?.isEditing"
+                            :class="{ 'video-disabled': currentScene?.isAudioGenerating || currentScene?.isEditing }">
                             您的浏览器不支持视频播放
                         </video>
+                        <!-- 隐藏的音频元素（用于同步播放配音） -->
+                        <audio ref="audioRef" :src="currentScene?.tts_url" style="display: none;"
+                            @ended="handleAudioEnded" @pause="handleMediaPause" @play="handleMediaPlay"
+                            :disabled="currentScene?.isAudioGenerating || currentScene?.isEditing"></audio>
                         <div class="video-subtitle-overlay" v-if="currentScene">
                             <p>{{ currentScene.scene_screen_desc }}</p>
                         </div>
+                        <!-- 视频时长不足提示 -->
+                        <!-- <div class="video-short-tip"
+                            v-if="currentScene && (videoDuration || 0) < (currentScene.audioDuration || 0)">
+                            视频已延长至音频时长
+                        </div> -->
                     </div>
 
                     <!-- Video Controls -->
                     <div class="video-controls">
                         <div class="playback-controls">
-                            <el-button circle class="control-button" @click="videoRef?.play()"
-                                :disabled="currentScene?.isAudioGenerating">
+                            <el-button circle class="control-button" @click="playSyncMedia()"
+                                :disabled="currentScene?.isAudioGenerating || currentScene?.isEditing">
                                 <el-icon>
                                     <VideoPlay />
                                 </el-icon>
                             </el-button>
-                            <el-button circle class="control-button" @click="videoRef?.pause()"
-                                :disabled="currentScene?.isAudioGenerating">
+                            <el-button circle class="control-button" @click="pauseSyncMedia()"
+                                :disabled="currentScene?.isAudioGenerating || currentScene?.isEditing">
                                 <el-icon>
                                     <VideoPause />
                                 </el-icon>
                             </el-button>
-                            <span class="time-display" v-if="videoDuration">
-                                {{ formatTime(currentTime) }} / {{ formatTime(videoDuration) }}
+                            <!-- <span class="time-display" v-if="videoDuration || currentScene?.audioDuration">
+                                {{ formatTime(currentTime) }} / {{ formatTime(Math.max(videoDuration || 0,
+                                    currentScene?.audioDuration || 0)) }}
+                            </span> -->
+                            <span class="time-display" v-if="videoDuration || currentScene?.audioDuration">
+                                {{ formatTime(currentTime) }} / {{ formatTime(videoDuration || 0) }}
                             </span>
                         </div>
                         <div class="feedback-controls">
-                            <el-button circle class="control-button" :disabled="currentScene?.isAudioGenerating">
+                            <el-button circle class="control-button"
+                                :disabled="currentScene?.isAudioGenerating || currentScene?.isEditing">
                                 <el-icon>
                                     <Star />
                                 </el-icon>
                             </el-button>
-                            <el-button circle class="control-button" :disabled="currentScene?.isAudioGenerating">
+                            <el-button circle class="control-button"
+                                :disabled="currentScene?.isAudioGenerating || currentScene?.isEditing">
                                 <el-icon>
                                     <StarFilled />
                                 </el-icon>
@@ -1270,9 +1618,14 @@ const confirmReplaceVideo = () => {
                     </div>
 
                     <!-- Progress Bar -->
-                    <div class="progress-container" v-if="videoDuration">
-                        <el-slider v-model="currentTime" :max="videoDuration" @change="handleTimeChange"
-                            class="video-progress" :disabled="currentScene?.isAudioGenerating" />
+                    <div class="progress-container" v-if="currentScene">
+                        <!-- <el-slider v-model="currentTime"
+                            :max="Math.max(videoDuration || 0, currentScene.audioDuration || 0)"
+                            @change="handleTimeChange" class="video-progress"
+                            :disabled="currentScene?.isAudioGenerating || currentScene?.isEditing" /> -->
+                        <el-slider v-model="currentTime" :max="videoDuration || 0" @change="handleTimeChange"
+                            class="video-progress"
+                            :disabled="currentScene?.isAudioGenerating || currentScene?.isEditing" />
                     </div>
                     <div class="action-buttons">
                         <el-button @click="goToPreviousStep1">
@@ -1324,7 +1677,7 @@ const confirmReplaceVideo = () => {
     </div>
 </template>
 
-<style scoped lang="scss">
+<style lang="scss">
 .main-content {
     padding: 0px, 20px, 20px, 20px;
 }
@@ -1842,7 +2195,7 @@ const confirmReplaceVideo = () => {
 
         .storyboard-form {
             width: 47%;
-            margin: 2rem;
+            margin-top: 2rem;
             padding: 2rem;
             border-radius: 8px;
             box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
@@ -1851,38 +2204,32 @@ const confirmReplaceVideo = () => {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                margin-bottom: 1rem;
+                margin-bottom: 1.5rem;
             }
 
             .section-title {
                 font-size: 1.125rem;
                 font-weight: 500;
-            }
-
-            .add-scene-button {
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
-                font-size: 0.875rem;
+                color: #333;
             }
 
             .scene-list {
                 display: flex;
                 flex-direction: column;
-                gap: 1rem;
+                gap: 1.5rem;
             }
 
             .chapter-timeline {
                 display: flex;
                 flex-direction: column;
-                gap: 0.5rem;
-                padding-left: 10px;
+                gap: 1rem;
+                padding-left: 15px;
                 border-left: 3px solid #e5e7eb;
                 margin-left: 10px;
             }
 
             .chapter-name {
-                font-size: 1.5rem;
+                font-size: 1.25rem;
                 font-weight: 600;
                 color: #2563eb;
                 margin-left: 0.5rem;
@@ -1891,23 +2238,21 @@ const confirmReplaceVideo = () => {
 
             .scene-item-wrapper {
                 position: relative;
-                margin-bottom: 2.5rem;
-
-                &:hover {
-                    .scene-actions {
-                        display: flex;
-                    }
-                }
+                margin-bottom: 1rem;
+                cursor: pointer;
 
                 &.is-disabled {
                     cursor: not-allowed;
-                    opacity: 0.8;
+                    opacity: 0.7;
+                }
+
+                &:hover .scene-actions {
+                    display: flex;
                 }
             }
 
             .scene-item {
                 transition: all 0.3s ease;
-                cursor: pointer;
                 overflow: visible;
                 position: relative;
 
@@ -1917,11 +2262,20 @@ const confirmReplaceVideo = () => {
                 }
 
                 &.is-loading {
-                    position: relative;
+                    cursor: not-allowed;
+                    background-color: #f9fafb;
+                    border: 1px solid #d1d5db;
                 }
 
-                &:hover {
+                &.is-editing {
+                    cursor: not-allowed;
+                    background-color: #f9fafb;
+                    border: 1px solid #fb923c;
+                }
+
+                &:not(.is-loading):not(.is-editing):hover {
                     background-color: #f3f4f6;
+                    border-color: #d1d5db;
                 }
 
                 :deep(.el-card__body) {
@@ -1935,36 +2289,41 @@ const confirmReplaceVideo = () => {
                 left: 0;
                 right: 0;
                 bottom: 0;
-                background-color: rgba(255, 255, 255, 0.8);
+                background-color: rgba(255, 255, 255, 0.9);
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
                 z-index: 10;
+                border-radius: 4px;
             }
 
             .loading-text {
                 margin-top: 1rem;
                 color: #6b7280;
+                font-size: 0.9rem;
             }
 
             .scene-content {
                 display: flex;
-                gap: 1rem;
+                gap: 1.25rem;
+                align-items: flex-start;
             }
 
             .scene-thumbnail {
                 position: relative;
                 width: 8rem;
                 height: 8rem;
-                border-radius: 0.375rem;
+                border-radius: 0.5rem;
                 overflow: hidden;
                 flex-shrink: 0;
+                background-color: #f5f5f5;
             }
 
             .thumbnail-image {
                 width: 100%;
                 height: 100%;
+                object-fit: cover;
             }
 
             .replace-button {
@@ -1973,9 +2332,15 @@ const confirmReplaceVideo = () => {
                 left: 0.5rem;
                 font-size: 0.75rem;
                 padding: 0.25rem 0.5rem;
-                background-color: rgba(255, 255, 255, 0.8);
+                background-color: rgba(255, 255, 255, 0.9);
                 backdrop-filter: blur(4px);
                 z-index: 5;
+                border-radius: 4px;
+
+                &:disabled {
+                    background-color: rgba(255, 255, 255, 0.6);
+                    cursor: not-allowed;
+                }
             }
 
             .scene-details {
@@ -1989,23 +2354,27 @@ const confirmReplaceVideo = () => {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                margin-bottom: 0.5rem;
+                margin-bottom: 0.75rem;
             }
 
             .scene-title {
-                font-size: 1.25rem;
+                font-size: 1.1rem;
                 font-weight: 500;
+                color: #333;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 70%;
             }
 
             .scene-duration {
-                font-size: 0.875rem;
+                font-size: 0.8rem;
                 color: #6b7280;
             }
 
             .scene-description-container {
                 flex: 1;
                 display: flex;
-                gap: 0.5rem;
+                gap: 0.75rem;
                 align-items: flex-start;
             }
 
@@ -2014,22 +2383,31 @@ const confirmReplaceVideo = () => {
 
                 :deep(.el-textarea__inner) {
                     height: 100%;
-                    font-size: 1.125rem;
+                    font-size: 0.95rem;
                     resize: none;
+                    border-color: #d1d5db;
+
+                    &:disabled {
+                        background-color: #f9fafb;
+                        color: #6b7280;
+                        cursor: not-allowed;
+                    }
                 }
             }
 
             .confirm-edit-button {
                 margin-top: 0.5rem;
                 align-self: flex-start;
+                padding: 0.25rem 0.75rem;
+                font-size: 0.8rem;
             }
 
             .scene-actions {
                 position: absolute;
                 right: 1rem;
-                bottom: -0.5rem;
+                bottom: -0.75rem;
                 display: none;
-                gap: 0.5rem;
+                gap: 0.75rem;
                 z-index: 10;
             }
 
@@ -2037,9 +2415,25 @@ const confirmReplaceVideo = () => {
                 box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
                 background-color: #ffffff;
                 border: 1px solid #e5e7eb;
+                width: 2rem;
+                height: 2rem;
+                display: flex;
+                align-items: center;
+                justify-content: center;
 
                 &:hover {
                     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                    border-color: #d1d5db;
+                }
+
+                &:disabled {
+                    background-color: #f9fafb;
+                    color: #9ca3af;
+                    cursor: not-allowed;
+                }
+
+                :deep(.el-icon) {
+                    font-size: 0.9rem;
                 }
             }
         }
