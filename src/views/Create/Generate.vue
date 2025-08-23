@@ -6,7 +6,7 @@ import {
 } from '@element-plus/icons-vue'
 import { onMounted, ref, reactive, computed, nextTick } from 'vue'
 import { EVENT_CODE, ElMessage, ElMessageBox } from 'element-plus'
-import { genProdTags, genTargetConsr, genScripts } from '@/api/generate.js'
+import { genProdTags, genTargetConsr, genScripts, genRecScripts, exportVideo, genTts } from '@/api/generate.js'
 
 const workState = ref('')
 const workStep = ref('')
@@ -31,7 +31,10 @@ const selectedAudience = ref()
 const selectedPlatform = ref('tiktok');
 const selectedLanguage = ref('english');
 const fileList = ref([]);
-const templateList = ref([])
+const templateResData = ref([])
+const streamContent1 = ref('')
+const streamCompleted1 = ref(false)
+const streamOutputRef1 = ref(null);
 
 const scriptDemo = ref([])
 // 分镜相关状态
@@ -109,9 +112,9 @@ const form = reactive({
   prod_name: '',
   region: '',
   prod_tags: [],
-  prod_imgs: ['a'],
-  target_consumer: "a",
-  script_template: "a",
+  prod_imgs: [],
+  target_consumer: "",
+  script_template: "",
   script_list: []
 })
 
@@ -170,20 +173,13 @@ const handleStreamMessage = (data) => {
 
   // 处理流式内容
   if (data.type === 'content' && typeof data.data === 'string') {
-    const text = data.data;
-    let currentPos = 0;
+    const lastChar = streamContent.value.slice(-1);
+    const newChar = data.data.slice(-1);
 
-    const typeWriter = () => {
-      if (currentPos < text.length) {
-        streamContent.value += text.charAt(currentPos);
-        currentPos++;
-        setTimeout(typeWriter, 1000);
-      } else {
-        scrollToBottom();
-      }
-    };
-
-    typeWriter();
+    if (lastChar !== newChar || data.data.length > 1) {
+      streamContent.value += data.data;
+      scrollToBottom();
+    }
   }
 
   // 处理最终结果
@@ -222,6 +218,10 @@ const handleStreamMessage = (data) => {
 
     selectedAudience.value = audienceGroups.value[0]
     console.log(selectedAudience.value)
+    nextTick(() => {
+      // 可选：打印日志确认
+      console.log('初始化选中:', selectedAudience.value);
+    });
   }
 };
 
@@ -251,51 +251,17 @@ const scrollToBottom = () => {
 
 const selectAudience = (audience) => {
   selectedAudience.value = audience;
-  console.log('selectedAudience', selectAudience.value)
+  console.log('selectedAudience', selectedAudience.value)
 };
 
 const goToNextStep = () => {
   // Navigate to the next step (template matching)
   ElMessage.success(`已选择 "${selectedAudience.value.title}" 作为目标人群，即将进入模版匹配环节`);
   // In a real app, this would navigate to the next page or update the current step
+  form.target_consumer = selectedAudience.value.title
+  console.log(form)
   workStep.value = 'template'
   active.value = 1
-
-  templateList.value = [
-    {
-      id: 1,
-      timing: "0-3s",
-      title: "痛点开场",
-      description: "展示用户在日常生活中遇到的问题和困扰，引发共鸣",
-      tag: {
-        type: "warning",
-        icon: Search,
-        text: "线上搜索"
-      }
-    },
-    {
-      id: 2,
-      timing: "4-8s",
-      title: "产品特写",
-      description: "通过细节特写展示产品的核心优势和独特卖点",
-      tag: {
-        type: "primary",
-        icon: Upload,
-        text: "用户上传"
-      }
-    },
-    {
-      id: 3,
-      timing: "9-15s",
-      title: "功能演示",
-      description: "深入展示产品的主要功能和使用场景，突出实用性",
-      tag: {
-        type: "success",
-        icon: Operation,
-        text: "AI 生成"
-      }
-    }
-  ]
 };
 
 // Select platform
@@ -332,27 +298,23 @@ const getLanguageName = (language) => {
 
 // Handle file upload
 const handleFileChange = (file) => {
-  // Check file type
-  const isVideo = file.raw.type === 'video/mp4' || file.raw.type === 'video/quicktime';
+  // // Check file type
+  // const isVideo = file.raw.type === 'video/mp4' || file.raw.type === 'video/quicktime';
 
-  // Check file size (less than 100MB)
-  const isLt100M = file.raw.size / 1024 / 1024 < 100;
+  // // Check file size (less than 100MB)
+  // const isLt100M = file.raw.size / 1024 / 1024 < 100;
 
-  if (!isVideo) {
-    ElMessage.error('只能上传 MP4/MOV 格式的视频!');
-    return false;
-  }
+  // if (!isVideo) {
+  //   ElMessage.error('只能上传 MP4/MOV 格式的视频!');
+  //   return false;
+  // }
 
-  if (!isLt100M) {
-    ElMessage.error('视频大小不能超过 100MB!');
-    return false;
-  }
+  // if (!isLt100M) {
+  //   ElMessage.error('视频大小不能超过 100MB!');
+  //   return false;
+  // }
 
-  // Set file status and percentage for demo
-  setTimeout(() => {
-    file.percentage = 100;
-    file.status = 'success';
-  }, 1000);
+  console.log(file, fileList.value)
 
   return true;
 };
@@ -365,6 +327,7 @@ const handleExceed = () => {
 // Handle file removal
 const handleRemove = (file) => {
   fileList.value = fileList.value.filter(item => item.uid !== file.uid);
+  console.log(fileList, file)
 };
 
 // Start analysis
@@ -375,8 +338,95 @@ const startAnalysis = () => {
   // }
 
   ElMessage.success('正在分析视频素材...');
-  isTemplateSubmitted.value = true
+
   // In a real app, this would trigger an API call to analyze the videos
+
+  console.log(form)
+  ElMessage.success('正在分析商品信息...');
+
+  // 重置流式输出结果
+  streamContent1.value = ''
+  streamCompleted1.value = false
+  templateResData.value = []
+
+  // 提交请求并处理流式响应
+  cancelRequest.value = genRecScripts(
+    { ...form },
+    handleStreamMessage1,
+    handleStreamComplete1,
+    handleStreamError1
+  );
+
+  // 标记为已提交，显示右侧区域
+  isTemplateSubmitted.value = true
+};
+
+const handleStreamMessage1 = (data) => {
+  console.log('前端收到的数据:', data); // 关键日志：确认数据是否到达这里
+
+  if (!data || typeof data !== 'object') {
+    console.warn('无效数据格式:', data);
+    return;
+  }
+
+  // 处理流式内容
+  if (data.type === 'content' && typeof data.data === 'string') {
+    // const text = data.data;
+    // let currentPos = 0;
+
+    // const typeWriter = () => {
+    //   if (currentPos < text.length) {
+    //     streamContent1.value += text.charAt(currentPos);
+    //     currentPos++;
+    //     setTimeout(typeWriter, 1000);
+    //   } else {
+    //     scrollToBottom1();
+    //   }
+    // };
+
+    // typeWriter();
+
+    // 避免重复添加相同内容（通过最后一个字符判断）
+    const lastChar = streamContent1.value.slice(-1);
+    const newChar = data.data.slice(-1);
+
+    if (lastChar !== newChar || data.data.length > 1) {
+      streamContent1.value += data.data;
+      scrollToBottom1();
+    }
+  }
+
+  // 处理最终结果
+  if (data.type === 'result') {
+
+    // resultData.value = data.data;
+    templateResData.value = data.data
+    console.log(templateResData.value)
+  }
+};
+
+
+// 处理流结束
+const handleStreamComplete1 = () => {
+  streamCompleted1.value = true;
+  ElMessage.success('分析完成');
+  scrollToBottom1();
+};
+
+// 处理流错误
+const handleStreamError1 = (error) => {
+  console.error('流式请求错误:', error);
+  ElMessage.error(`分析失败: ${error.message}`);
+  isSubmitting.value = false;
+};
+
+// 滚动到底部
+const scrollToBottom1 = () => {
+  nextTick(() => {
+    if (streamOutputRef1.value) {
+      streamOutputRef1.value.scrollTop = streamOutputRef1.value.scrollHeight;
+    }
+  });
 };
 
 // Navigate to previous step
@@ -927,6 +977,12 @@ const regenerateAudio = async (chapterIndex, sceneIndex) => {
   try {
     // 模拟API调用延迟
     await new Promise(resolve => setTimeout(resolve, 2000));
+    genTts({
+      "scene_subtitle": "Hello world"
+    }).then(res => {
+      // scene.tts_url = res.data.data.tts_url
+      console.log(res.data.data.tts_url)
+    })
 
     // 1. 替换音频资源
     const newAudioUrl = audioUrls[Math.floor(Math.random() * audioUrls.length)];
@@ -1080,7 +1136,14 @@ const goToPreviousStep1 = () => {
 
 const goFinish = () => {
   ElMessage.success('已完成');
-  workStep.value = 'persona';
+  // workStep.value = 'persona';
+  const testExport = { "elements": [{ "chapter": "test", "scene": [{ "scene_id": "1", "scene_subtitle": "test" }] }] }
+  const exportFiles = ref()
+
+  exportVideo(testExport).then(res => {
+    exportFiles.value = res.data.data
+    console.log(exportFiles.value)
+  })
   active.value = 3;
   resetMedia();
 };
@@ -1271,7 +1334,7 @@ const confirmReplaceVideo = () => {
               </div>
               <div class="audience-groups">
                 <el-card v-for="(audience, index) in audienceGroups" :key="index" class="audience-card"
-                  :class="{ 'is-selected': audience.id === selectedAudience.id }" shadow="hover"
+                  :class="{ 'is-selected': selectedAudience && audience.id === selectedAudience.id }" shadow="hover"
                   @click="selectAudience(audience)">
                   <div class="audience-header">
                     <h3 class="audience-title">{{ audience.title }}</h3>
@@ -1372,9 +1435,9 @@ const confirmReplaceVideo = () => {
             <!-- Material Upload -->
             <div class="settings-section no-border">
               <h3 class="section-title">上传素材</h3>
-              <el-upload class="upload-container" drag action="#" :auto-upload="false" :limit="3"
-                :on-change="handleFileChange" :on-exceed="handleExceed" :on-remove="handleRemove" :file-list="fileList"
-                multiple accept="video/mp4,video/quicktime">
+              <el-upload class="upload-container" drag action="#" :limit="3" :on-change="handleFileChange"
+                :on-exceed="handleExceed" :on-remove="handleRemove" v-model:file-list="fileList" multiple
+                accept="video/mp4,video/quicktime">
                 <el-icon class="upload-icon">
                   <Upload />
                 </el-icon>
@@ -1382,16 +1445,6 @@ const confirmReplaceVideo = () => {
                   <div class="upload-text">点击或拖拽上传视频</div>
                   <div class="upload-hint">支持 MP4/MOV 格式，≤3段，单段≤100MB</div>
                 </div>
-                <template #file="{ file }">
-                  <div class="upload-file-item">
-                    <el-icon class="file-icon">
-                      <VideoPlay />
-                    </el-icon>
-                    <span class="file-name">{{ file.name }}</span>
-                    <el-progress :percentage="file.percentage || 0"
-                      :status="file.status === 'success' ? 'success' : ''" />
-                  </div>
-                </template>
               </el-upload>
               <el-button class="analyze-button" type="primary" @click="startAnalysis">
                 <el-icon>
@@ -1405,7 +1458,13 @@ const confirmReplaceVideo = () => {
         <div class="template-res" v-if="isTemplateSubmitted">
           <div class="template-section">
             <el-card class="template-card">
-              <h3 class="section-title">推荐模板</h3>
+              <h2 class="section-title">推荐模板</h2>
+              <div class="stream-output-container">
+                <div class="stream-output" ref="streamOutputRef1">
+                  <p v-if="streamContent1 === '' && !streamCompleted1">正在分析中，请稍候...</p>
+                  <p v-else>{{ streamContent1 }}</p>
+                </div>
+              </div>
               <div class="recommended-template">
                 <!-- Template Header -->
                 <div class="template-header">
@@ -1413,8 +1472,8 @@ const confirmReplaceVideo = () => {
                     <i class="fab fa-tiktok template-platform-icon"></i>
                   </div>
                   <div class="template-info">
-                    <div class="template-name">{{ getPlatformName(selectedPlatform) }} 爆款模板</div>
-                    <div class="template-description">适用于产品展示和功能介绍</div>
+                    <div class="template-name">{{ templateResData.title }}</div>
+                    <div class="template-description">{{ templateResData.description }}</div>
                   </div>
                 </div>
 
@@ -1422,21 +1481,21 @@ const confirmReplaceVideo = () => {
                 <div class="template-sections">
                   <!-- Section 1 -->
 
-                  <el-card v-for="(section, index) in templateList" :key="index" class="template-section-item"
-                    shadow="hover">
+                  <el-card v-for="(section, index) in templateResData.structure" :key="index"
+                    class="template-section-item" shadow="hover">
                     <div class="section-card">
                       <div class="section-timing">
-                        <div class="timing-label">{{ section.timing }}</div>
-                        <div class="section-title">{{ section.title }}</div>
+                        <!-- <div class="timing-label">{{ section.timing }}</div> -->
+                        <div class="section-title">{{ section.chapter }}</div>
                       </div>
                       <div class="section-content">
                         <div class="section-description">{{ section.description }}</div>
-                        <el-tag v-if="section.tag" class="section-tag" :type="section.tag.type">
+                        <!-- <el-tag v-if="section.tag" class="section-tag" :type="section.tag.type">
                           <el-icon>
                             <component :is="section.tag.icon" />
                           </el-icon>
                           <span>{{ section.tag.text }}</span>
-                        </el-tag>
+                        </el-tag> -->
                       </div>
                     </div>
                   </el-card>
@@ -1629,7 +1688,7 @@ const confirmReplaceVideo = () => {
               <span>上一步</span>
             </el-button>
             <el-button type="primary" class="next-button" @click="goFinish">
-              完成
+              导出视频
             </el-button>
           </div>
         </div>
@@ -1811,10 +1870,8 @@ const confirmReplaceVideo = () => {
         margin-bottom: 0 !important;
 
         &.is-selected {
-          :deep(.el-card__body) {
-            border: 1px solid #2563eb;
-            border-radius: 0.5rem;
-          }
+          border: 1px solid #2563eb;
+          border-radius: 0.5rem;
         }
       }
 
@@ -1892,7 +1949,7 @@ const confirmReplaceVideo = () => {
       &.shrink-template-form {
         width: 47%;
         margin: 0;
-        margin-right: 2rem;
+        // margin-right: 2rem;
       }
 
       .settings-card {
@@ -2003,24 +2060,6 @@ const confirmReplaceVideo = () => {
         font-size: 0.875rem;
       }
 
-      .upload-file-item {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 0.5rem;
-
-        .file-icon {
-          color: #1677FF;
-        }
-
-        .file-name {
-          flex: 1;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-      }
-
       .analyze-button {
         width: 100%;
         padding: 0.75rem 0;
@@ -2035,10 +2074,27 @@ const confirmReplaceVideo = () => {
     .template-res {
       flex: 1;
 
+      .stream-output-container {
+        flex: 1;
+        margin: 10px 0;
+        overflow: hidden;
+      }
+
+      .stream-output {
+        height: 100%;
+        overflow-y: auto;
+        padding: 15px;
+        background-color: #f9f9f9;
+        border-radius: 4px;
+        line-height: 1.8;
+        font-size: 14px;
+        white-space: pre-wrap;
+      }
+
       // Template section
       .template-section {
         flex: 1;
-        margin: 0 2rem;
+        // margin: 0 2rem;
         padding: 2rem;
       }
 
@@ -2109,6 +2165,7 @@ const confirmReplaceVideo = () => {
 
         :deep(.el-card__body) {
           width: 100%;
+          flex: auto;
         }
       }
 
@@ -2187,7 +2244,7 @@ const confirmReplaceVideo = () => {
 
     .storyboard-form {
       width: 47%;
-      margin-top: 2rem;
+      margin: 2rem;
       padding: 2rem;
       border-radius: 8px;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
@@ -2200,7 +2257,7 @@ const confirmReplaceVideo = () => {
       }
 
       .section-title {
-        font-size: 1.125rem;
+        font-size: 1rem;
         font-weight: 500;
         color: #333;
       }
@@ -2221,7 +2278,7 @@ const confirmReplaceVideo = () => {
       }
 
       .chapter-name {
-        font-size: 1.25rem;
+        font-size: 1.125rem;
         font-weight: 600;
         color: #2563eb;
         margin-left: 0.5rem;
@@ -2350,12 +2407,12 @@ const confirmReplaceVideo = () => {
       }
 
       .scene-title {
-        font-size: 1.1rem;
+        font-size: 1rem;
         font-weight: 500;
         color: #333;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 70%;
+        max-width: 65%;
       }
 
       .scene-duration {
@@ -2433,7 +2490,7 @@ const confirmReplaceVideo = () => {
     .storyboard-res {
       flex: 1;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-      margin-top: 2rem;
+      margin: 2rem;
       padding: 2rem;
 
       .preview-header {
